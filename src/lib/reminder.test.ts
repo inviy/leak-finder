@@ -4,6 +4,7 @@ import {
   contractReminder,
   contractReminderDate,
   contractReminderPath,
+  contractReminderTitle,
   foldLine,
   googleCalendarUrl,
   parseReminderQuery,
@@ -69,7 +70,7 @@ describe("약정 알림 날짜를 오늘 기준으로", () => {
 describe("달력 파일 줄 접기 (RFC 5545)", () => {
   const bytes = (t: string) => new TextEncoder().encode(t).length;
   it("모든 줄이 75바이트 이하이고, 펼치면 원래 글", () => {
-    const ics = buildIcs(contractReminder({ year: 2026, month: 11, day: 1 }, true, 2026, "https://leak-finder-five.vercel.app"), "20261019T080000Z");
+    const ics = buildIcs(contractReminder({ year: 2026, month: 11, day: 1 }, 12, 2026, "https://leak-finder-five.vercel.app"), "20261019T080000Z");
     const lines = ics.split("\r\n");
     expect(Math.max(...lines.map(bytes))).toBeLessThanOrEqual(75);
     const unfolded = ics.replace(/\r\n /g, "");
@@ -87,10 +88,10 @@ describe("달력 파일 주소 검사", () => {
   const today = { year: 2026, month: 10, day: 19 };
   const q = (s: string) => new URLSearchParams(s);
   it("화면이 만든 주소는 통과", () => {
-    const path = contractReminderPath({ year: 2027, month: 2, day: 1 }, true, 2027);
+    const path = contractReminderPath({ year: 2027, month: 2, day: 1 }, 3, 2027);
     expect(parseReminderQuery(new URL(path, "https://x").searchParams, today)).toEqual({
       date: { year: 2027, month: 2, day: 1 },
-      monthKnown: true,
+      endMonth: 3,
       endYear: 2027,
     });
   });
@@ -98,7 +99,21 @@ describe("달력 파일 주소 검사", () => {
     expect(parseReminderQuery(q("d=20270230&m=1&y=2027"), today)).toBeNull();
     expect(parseReminderQuery(q("d=2027-02-01&m=1&y=2027"), today)).toBeNull();
     expect(parseReminderQuery(q("d=20270201&m=2&y=2027"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=20270201&e=13&y=2027"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=20270201&e=x&y=2027"), today)).toBeNull();
     expect(parseReminderQuery(q("d=20500101&m=0&y=2050"), today)).toBeNull();
     expect(parseReminderQuery(q("d=20270201&m=1&y=2030"), today)).toBeNull();
+  });
+});
+
+describe("알림 제목에 끝나는 해와 달", () => {
+  it("달을 알면 해와 달, 모르면 해만", () => {
+    expect(contractReminderTitle(2027, 12)).toBe("2027년 12월, 인터넷 약정 끝나요");
+    expect(contractReminderTitle(2027)).toBe("2027년, 인터넷 약정 끝나는 해예요");
+  });
+  it("달을 모르면 e=0, 예전 주소 m=1 도 받아 줌", () => {
+    const today = { year: 2026, month: 10, day: 19 };
+    expect(parseReminderQuery(new URLSearchParams("d=20270101&e=0&y=2027"), today)).toEqual({ date: { year: 2027, month: 1, day: 1 }, endYear: 2027, endMonth: undefined });
+    expect(parseReminderQuery(new URLSearchParams("d=20271101&m=1&y=2027"), today)).toMatchObject({ legacyMonthKnown: true });
   });
 });

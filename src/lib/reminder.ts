@@ -113,34 +113,44 @@ export function planContractReminder(
   return { kind: "remind", date: next };
 }
 
+/** 알림 제목에 끝나는 해와 달을 넣어, 알림을 받았을 때 몇 년 무슨 일인지 바로 알게 함 */
+export function contractReminderTitle(endYear: number, endMonth?: number): string {
+  return endMonth ? `${endYear}년 ${endMonth}월, 인터넷 약정 끝나요` : `${endYear}년, 인터넷 약정 끝나는 해예요`;
+}
+
 /**
  * 인터넷 약정 알림 내용. 서버(달력 파일)와 화면(구글 캘린더)이 같은 글을 쓰도록 한 곳에서 만듦.
  * 사용자가 쓴 글은 넣지 않고 날짜와 정해진 문장만 씀
  */
-export function contractReminder(date: YMD, monthKnown: boolean, endYear: number, siteUrl: string): Reminder {
+export function contractReminder(date: YMD, endMonth: number | undefined, endYear: number, siteUrl: string): Reminder {
   return {
     id: `r7-${date.year}-${pad(date.month)}-${pad(date.day)}`,
-    title: monthKnown ? "다음 달 인터넷 약정 끝나요" : `${endYear}년, 인터넷 약정 끝나는 해예요`,
+    title: contractReminderTitle(endYear, endMonth),
     details: `새는돈 알림: 지금 통신사에 재약정 혜택을 물어보고, 다른 통신사 가입 혜택과 비교해 보세요. ${siteUrl}`,
     date,
   };
 }
 
 /** 달력 파일 주소 (서버가 text/calendar 로 내려 줌. 아이폰 Safari 는 이 방식이어야 바로 "캘린더에 추가") */
-export function contractReminderPath(date: YMD, monthKnown: boolean, endYear: number): string {
-  const q = new URLSearchParams({ d: ymd(date), m: monthKnown ? "1" : "0", y: String(endYear) });
+export function contractReminderPath(date: YMD, endMonth: number | undefined, endYear: number): string {
+  const q = new URLSearchParams({ d: ymd(date), e: String(endMonth ?? 0), y: String(endYear) });
   return `/api/reminder?${q.toString()}`;
 }
 
-/** 서버에서 주소 값 검사: 형식이 틀리거나 너무 먼 날짜는 거절 */
+/**
+ * 서버에서 주소 값 검사: 형식이 틀리거나 너무 먼 날짜는 거절.
+ * e = 끝나는 달 (0 은 모름). 예전 주소의 m=1(달 앎) / m=0 도 받아 줌
+ */
 export function parseReminderQuery(
   q: URLSearchParams,
   today: YMD,
-): { date: YMD; monthKnown: boolean; endYear: number } | null {
+): { date: YMD; endMonth?: number; endYear: number; legacyMonthKnown?: boolean } | null {
   const d = q.get("d") ?? "";
+  const e = q.get("e");
   const m = q.get("m");
   const y = q.get("y") ?? "";
-  if (!/^\d{8}$/.test(d) || (m !== "0" && m !== "1") || !/^\d{4}$/.test(y)) return null;
+  if (!/^\d{8}$/.test(d) || !/^\d{4}$/.test(y)) return null;
+  if (e !== null ? !/^(?:[0-9]|1[0-2])$/.test(e) : m !== "0" && m !== "1") return null;
   const date = { year: Number(d.slice(0, 4)), month: Number(d.slice(4, 6)), day: Number(d.slice(6, 8)) };
   const check = new Date(Date.UTC(date.year, date.month - 1, date.day));
   if (check.getUTCFullYear() !== date.year || check.getUTCMonth() + 1 !== date.month || check.getUTCDate() !== date.day) return null;
@@ -148,5 +158,6 @@ export function parseReminderQuery(
   // 오늘부터 10년 안, 끝나는 해와 알림 날짜가 1년 넘게 어긋나지 않음
   if (key(date) < key(today) - 10000 || date.year > today.year + 10) return null;
   if (Math.abs(endYear - date.year) > 1) return null;
-  return { date, monthKnown: m === "1", endYear };
+  if (e !== null) return { date, endYear, endMonth: Number(e) || undefined };
+  return { date, endYear, legacyMonthKnown: m === "1" };
 }
