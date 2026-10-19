@@ -134,6 +134,7 @@ describe("reconcile (검산과 화면 입력값)", () => {
   it("모바일 입력값: 월정액, 선택약정 모름, 부가서비스 4개, 가산금", () => {
     const [m] = reconcile(validateExtracted(ktModelOutput)).drafts;
     expect(m.planMonthlyFee).toBe("62728");
+    expect(m.planDiscount).toBe("9220");
     expect(m.selective).toBe("unknown");
     expect(m.addons.map((a) => a.name)).toEqual([
       "듀얼번호 Lite/투폰",

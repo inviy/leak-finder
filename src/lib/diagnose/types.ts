@@ -27,6 +27,8 @@ export interface BillInput {
   planName: string;
   /** 요금제 월정액 (할인 전, 원). 요금제가 없는 명세서(단말대금 등)는 0 */
   planMonthlyFee: number;
+  /** 월정액 줄에 찍힌 할인금액 (원, 양수). 무슨 할인인지는 모를 수 있음 */
+  planDiscount?: number;
   /**
    * 선택약정 할인을 받고 있는지.
    * null = 고지서만으로 알 수 없음 (할인이 합계로만 찍힌 경우)
