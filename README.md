@@ -28,10 +28,26 @@
 - 고지서가 여러 장(모바일, 단말대금, 인터넷·TV)이면 `diagnoseAll`로 한 번에 진단하고, 항목마다 출처 명세서를 붙입니다.
 - 코드는 `src/lib/diagnose/`, 실제 고지서에서 금액만 옮긴 테스트 데이터는 `src/lib/diagnose/fixtures/`에 있습니다.
 
+## 고지서 자동 읽기
+
+캡처를 `POST /api/extract`로 보내면 `claude-haiku-5-5`가 금액과 항목명만 JSON으로 읽고, 서버가 검증한 뒤 확인 화면 입력값으로 바꿉니다.
+
+| 단계 | 하는 일 | 코드 |
+| --- | --- | --- |
+| 한도 확인 | IP당 10분에 10회, 4장, 장당 4MB, 합계 10MB, PNG/JPG/WEBP/GIF | `src/app/api/extract/route.ts`, `src/lib/extract/rate-limit.ts` |
+| 모델 호출 | 이름, 번호는 출력하지 않게 지시, 이미지 속 지시문 무시 | `src/lib/extract/claude.ts` |
+| 응답 검증 | 모양, 금액 범위, 글자 길이 확인, 틀린 항목 버림 | `src/lib/extract/schema.ts` |
+| 검산 | 항목 합(또는 부가세 포함 합)이 요금계와 10원 이내인지, 아니면 확인 화면에 경고 | `src/lib/extract/reconcile.ts` |
+
+- 이미지는 메모리에서만 처리하고 저장하지 않습니다. 실패 로그에도 이미지나 응답 내용은 남기지 않습니다.
+- `ANTHROPIC_API_KEY`가 없으면 503을 돌려주고, 화면은 직접 입력으로 이어집니다.
+- 모델 출력은 신뢰하지 않습니다. 공격자가 모델 출력을 완전히 조작해도 할 수 있는 일은 자기 결과 화면에 틀린 숫자를 띄우는 것뿐입니다 (도구 호출 없음, 다른 사용자 데이터 없음, 화면은 글자로만 표시).
+
 ## 개발
 
 ```bash
 npm install
+cp .env.example .env.local   # 자동 읽기를 쓰려면 ANTHROPIC_API_KEY 입력
 npm run dev     # http://localhost:3000
 npm test        # 진단 규칙 테스트
 ```

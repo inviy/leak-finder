@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { diagnoseAll, type Carrier, type Diagnosis } from "@/lib/diagnose";
+import type { Extracted } from "@/lib/extract/schema";
+import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import {
   KIND_LABEL,
   newAddon,
@@ -27,7 +29,10 @@ interface Shot {
   id: string;
   url: string;
   name: string;
+  file: File;
 }
+
+type ReadState = { status: "idle" } | { status: "reading" } | { status: "error"; message: string };
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
@@ -37,6 +42,30 @@ export default function LeakFinder() {
   const [shots, setShots] = useState<Shot[]>([]);
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
   const [activeId, setActiveId] = useState(statements[0].id);
+  const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
+  const [read, setRead] = useState<ReadState>({ status: "idle" });
+
+  const autoRead = async () => {
+    setRead({ status: "reading" });
+    try {
+      const body = new FormData();
+      shots.forEach((s) => body.append("images", s.file));
+      const res = await fetch("/api/extract", { method: "POST", body });
+      const data = await res.json();
+      if (!res.ok) {
+        setRead({ status: "error", message: data?.message ?? "읽지 못했어요. 직접 입력해 주세요." });
+        return;
+      }
+      const r = reconcile(data as Extracted);
+      setStatements(r.drafts);
+      setActiveId(r.drafts[0].id);
+      setWarnings(r.warnings);
+      setRead({ status: "idle" });
+      setStep("confirm");
+    } catch {
+      setRead({ status: "error", message: "연결이 불안정해요. 잠시 후 다시 시도하거나 직접 입력해 주세요." });
+    }
+  };
 
   // 브라우저 안에서만 미리보기, 페이지를 떠날 때 한 번에 지움
   const shotsRef = useRef<Shot[]>([]);
@@ -74,7 +103,7 @@ export default function LeakFinder() {
         onAddShots={(files) =>
           setShots((s) => [
             ...s,
-            ...Array.from(files).map((f) => ({ id: newId(), url: URL.createObjectURL(f), name: f.name })),
+            ...Array.from(files).map((f) => ({ id: newId(), url: URL.createObjectURL(f), name: f.name, file: f })),
           ])
         }
         onRemoveShot={(id) =>
@@ -85,6 +114,8 @@ export default function LeakFinder() {
           })
         }
         onNext={() => setStep("confirm")}
+        onAutoRead={autoRead}
+        read={read}
       />
     );
   }
@@ -96,8 +127,21 @@ export default function LeakFinder() {
         <button className="link-btn" onClick={() => setStep("upload")}>&lt; 처음으로</button>
         <div>
           <h1 className="title">고지서 내용을 확인해 주세요</h1>
-          <p className="sub">고지서에 찍힌 금액을 옮겨 적어 주세요. 쓰지 않는 부가서비스는 체크를 풀어 주세요.</p>
+          <p className="sub">금액이 고지서와 같은지 보고, 쓰지 않는 부가서비스는 체크를 풀어 주세요.</p>
         </div>
+
+        {warnings.length > 0 && (
+          <div className="warn" role="status">
+            <strong>확인이 필요해요</strong>
+            <ul>
+              {warnings.map((w, i) => (
+                <li key={i}>
+                  <b>{w.label}</b> {w.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {shots.length > 0 && (
           <div className="thumbs" aria-label="올린 캡처">
@@ -158,8 +202,11 @@ function UploadScreen(props: {
   onAddShots: (files: FileList) => void;
   onRemoveShot: (id: string) => void;
   onNext: () => void;
+  onAutoRead: () => void;
+  read: ReadState;
 }) {
-  const { carrier, onCarrier, shots, onAddShots, onRemoveShot, onNext } = props;
+  const { carrier, onCarrier, shots, onAddShots, onRemoveShot, onNext, onAutoRead, read } = props;
+  const reading = read.status === "reading";
   return (
     <main className="screen">
       <div className="brand">새는돈</div>
@@ -189,7 +236,7 @@ function UploadScreen(props: {
 
       <label className="drop">
         <strong>캡처 올리기 (여러 장 가능)</strong>
-        <span>이미지는 이 기기 안에서만 보여요. 서버로 보내지 않아요.</span>
+        <span>PNG, JPG 캡처를 4장까지 올릴 수 있어요.</span>
         <input
           type="file"
           accept="image/*"
@@ -214,12 +261,26 @@ function UploadScreen(props: {
         </div>
       )}
 
+      {read.status === "error" && (
+        <div className="warn" role="alert">{read.message}</div>
+      )}
+
       <p className="note">
-        지금은 캡처를 보면서 금액을 직접 옮겨 적는 방식이에요. 캡처에서 자동으로 읽어 오는 기능은 준비 중이에요.
+        자동으로 읽기를 누르면 캡처를 분석 서버로 보내 금액만 읽고, 읽은 뒤 바로 지워요. 저장하지 않아요.
+        이름, 전화번호는 읽지 않아요.
       </p>
 
       <div className="spacer" />
-      <button className="btn" onClick={onNext}>{shots.length > 0 ? "다음" : "캡처 없이 직접 입력"}</button>
+      {shots.length > 0 ? (
+        <>
+          <button className="btn" onClick={onAutoRead} disabled={reading || shots.length > 4}>
+            {reading ? "읽는 중..." : shots.length > 4 ? "4장까지만 올려 주세요" : "자동으로 읽기"}
+          </button>
+          <button className="btn secondary" onClick={onNext} disabled={reading}>직접 입력하기</button>
+        </>
+      ) : (
+        <button className="btn secondary" onClick={onNext}>캡처 없이 직접 입력</button>
+      )}
     </main>
   );
 }
