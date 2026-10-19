@@ -250,3 +250,23 @@ button, input, select { font: inherit; color: inherit; }
 .top-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .top-row .progress { width: 96px; }
 .step-count { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ── 결과: 할 일 목록 ── */
+.task { width: 100%; background: none; border: none; text-align: left; padding: 18px 20px; display: grid; grid-template-columns: 24px 1fr auto; gap: 14px; align-items: center; cursor: pointer; }
+.task:active { background: #f2f2f1; }
+.task:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.task-mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #c9c9c7; position: relative; }
+.task.done .task-mark { background: #1d6b3a; border-color: #1d6b3a; }
+.task.done .task-mark::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); }
+.task-name { font-size: 16px; font-weight: 600; line-height: 1.4; word-break: keep-all; }
+.task.done .task-name { color: var(--muted); text-decoration: line-through; font-weight: 400; }
+.task-amt { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.task.done .task-amt { color: var(--muted); font-weight: 400; }
+.section-title { margin: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ── 조치: 할 일 하나 ── */
+.how { margin: 0; padding: 0 0 0 22px; display: flex; flex-direction: column; gap: 14px; font-size: 16px; line-height: 1.6; }
+.how li::marker { font-weight: 700; }
+.caution { margin: 0; font-size: 15px; line-height: 1.55; color: #7a4d00; background: #fff6e5; border-radius: 12px; padding: 12px 14px; }
+.link-btn.center { text-align: center; padding: 6px 0; font-size: 15px; }

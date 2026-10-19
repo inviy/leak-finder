@@ -63,6 +63,8 @@ export default function LeakFinder() {
   const [asked, setAsked] = useState<Set<string>>(new Set());
   const [read, setRead] = useState<ReadState>({ status: "idle" });
   const [guideKey, setGuideKey] = useState("");
+  /** 이번에 "나중에 할게요"로 넘긴 것. 결과에서 다시 시작하면 비움 */
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [done, setDone] = useState<Set<string>>(new Set());
   const toggleDone = (k: string) =>
     setDone((d) => {
@@ -335,13 +337,29 @@ export default function LeakFinder() {
   }
 
   if (step === "action") {
+    const keys = result.findings.map(findingKey);
+    // 다음 할 일: 지금 것 뒤에서 아직 안 한 것, 없으면 결과로
+    const goNext = (from: string, doneNow: Set<string>) => {
+      const i = keys.indexOf(from);
+      const next = [...keys.slice(i + 1), ...keys.slice(0, i)].find((k) => !doneNow.has(k) && !skipped.has(k));
+      if (next) setGuideKey(next);
+      else setStep("result");
+    };
     return (
       <ActionScreen
         result={result}
         activeKey={guideKey}
         done={done}
-        onSelect={setGuideKey}
-        onToggleDone={toggleDone}
+        onDone={(k) => {
+          const n = new Set(done).add(k);
+          setDone(n);
+          goNext(k, n);
+        }}
+        onUndo={toggleDone}
+        onLater={(k) => {
+          setSkipped((x) => new Set(x).add(k));
+          goNext(k, new Set([...done, k]));
+        }}
         onBack={() => setStep("result")}
       />
     );
@@ -356,6 +374,7 @@ export default function LeakFinder() {
         setStep("confirm");
       }}
       onOpenGuide={(k) => {
+        setSkipped(new Set());
         setGuideKey(k);
         setStep("action");
       }}
@@ -611,6 +630,12 @@ function StatementForm(props: {
 
 const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}`;
 
+/** 결과, 조치 화면에서 쓰는 짧은 할 일 이름 */
+function taskTitle(f: Finding): string {
+  if (f.rule === "R2" && f.kind === "saving") return f.title.replace("안 쓰는 부가서비스", "안 쓰는 서비스") + " 끄기";
+  return guideFor(f.rule, f.kind).title;
+}
+
 function ResultScreen(props: {
   result: Diagnosis;
   done: Set<string>;
@@ -618,9 +643,13 @@ function ResultScreen(props: {
   onOpenGuide: (key: string) => void;
 }) {
   const { result, done, onBack, onOpenGuide } = props;
-  const savings = result.findings.filter((f) => f.kind === "saving");
-  const checks = result.findings.filter((f) => f.kind === "check");
   const [copied, setCopied] = useState(false);
+  const tasks = result.findings;
+  const left = tasks.filter((f) => !done.has(findingKey(f)));
+  const savedSoFar = tasks
+    .filter((f) => f.kind === "saving" && done.has(findingKey(f)))
+    .reduce((s, f) => s + f.yearlySaving, 0);
+  const allDone = tasks.length > 0 && left.length === 0;
 
   const share = async () => {
     const text = `새는돈: 지금 그대로 두면 1년에 ${won(result.yearlyTotal)} 새고 있대요.`;
@@ -637,53 +666,74 @@ function ResultScreen(props: {
     }
   };
 
-  const card = (f: Finding, right: React.ReactNode) => {
-    const key = findingKey(f);
-    return (
-      <button key={key} className="card finding finding-btn" onClick={() => onOpenGuide(key)}>
-        <div className="finding-head">
-          <span>{f.title}</span>
-          {right}
-        </div>
-        <div className="finding-reason">{f.reason}</div>
-        <div className="finding-foot">
-          <span className="finding-source">{f.source}</span>
-          <span className={done.has(key) ? "done-tag" : "go-tag"}>{done.has(key) ? "완료" : "방법 보기 >"}</span>
-        </div>
-      </button>
-    );
-  };
-
   return (
     <main className="screen">
-      <button className="link-btn" onClick={onBack}>&lt; 입력 고치기</button>
-
-      <div className="hero">
-        <span className="small">지금 그대로 두면 1년에</span>
-        <span className="big">{won(result.yearlyTotal)}</span>
-        <span className="small">
-          {savings.length > 0 ? `새고 있어요. ${savings.length}곳에서 찾았어요.` : "새는 곳을 찾지 못했어요."}
-        </span>
+      <div className="top-row">
+        <button className="link-btn" onClick={onBack}>&lt; 입력 고치기</button>
+        <button className="link-btn" onClick={share}>{copied ? "주소 복사됨" : "공유"}</button>
       </div>
 
-      {savings.map((f) => card(f, <span>{won(f.yearlySaving)}</span>))}
+      <div className="hero">
+        {allDone ? (
+          <>
+            <span className="small">할 일을 다 했어요</span>
+            <span className="big">{won(savedSoFar)}</span>
+            <span className="small">1년 동안 이만큼 덜 새요.</span>
+          </>
+        ) : savedSoFar > 0 ? (
+          <>
+            <span className="small">아직 1년에</span>
+            <span className="big">{won(result.yearlyTotal - savedSoFar)}</span>
+            <span className="small">새고 있어요. 벌써 {won(savedSoFar)}은 막았어요.</span>
+          </>
+        ) : (
+          <>
+            <span className="small">지금 그대로 두면 1년에</span>
+            <span className="big">{won(result.yearlyTotal)}</span>
+            <span className="small">{result.yearlyTotal > 0 ? "새고 있어요." : "새는 돈은 못 찾았어요."}</span>
+          </>
+        )}
+      </div>
 
-      {checks.length > 0 && (
+      {tasks.length > 0 ? (
         <>
-          <div className="section-title">직접 확인해 볼 것</div>
-          {checks.map((f) => card(f, <span className="badge">확인</span>))}
+          <p className="section-title">
+            {allDone ? "한 일" : `할 일 ${left.length}개`}
+          </p>
+          <ul className="sum-list">
+            {tasks.map((f) => {
+              const k = findingKey(f);
+              const isDone = done.has(k);
+              return (
+                <li key={k}>
+                  <button className={isDone ? "task done" : "task"} onClick={() => onOpenGuide(k)}>
+                    <span className="task-mark" aria-hidden />
+                    <span className="task-name">
+                      {taskTitle(f)}
+                      {isDone && <span className="sr-only"> (했어요)</span>}
+                    </span>
+                    <span className="task-amt">{f.kind === "saving" ? won(f.yearlySaving) : "확인"}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </>
+      ) : (
+        <p className="empty">입력한 내용에서는 새는 돈이 보이지 않아요.</p>
       )}
 
-      {result.findings.length === 0 && <p className="empty">입력한 내용에서는 새는 돈이 보이지 않아요.</p>}
-
-      <p className="note">절감액은 고지서에 찍힌 금액으로 계산한 예상치이며, 통신사 조건에 따라 달라질 수 있어요.</p>
-
       <div className="spacer" />
-      <div className="btn-row">
-        <button className="btn secondary" onClick={share}>{copied ? "복사됨" : "결과 공유"}</button>
-        {result.findings.length > 0 && (
-          <button className="btn" onClick={() => onOpenGuide(findingKey(result.findings[0]))}>줄이는 방법 보기</button>
+      <div className="cta-bar">
+        <p className="note center">금액은 고지서 기준 예상치예요.</p>
+        {left.length > 0 ? (
+          <button className="btn" onClick={() => onOpenGuide(findingKey(left[0]))}>
+            {left.length === tasks.length ? "하나씩 해 보기" : "남은 것 이어서 하기"}
+          </button>
+        ) : (
+          allDone && (
+            <button className="btn" onClick={share}>{copied ? "주소를 복사했어요" : "친구에게도 알려 주기"}</button>
+          )
         )}
       </div>
     </main>
@@ -694,62 +744,54 @@ function ActionScreen(props: {
   result: Diagnosis;
   activeKey: string;
   done: Set<string>;
-  onSelect: (key: string) => void;
-  onToggleDone: (key: string) => void;
+  onDone: (key: string) => void;
+  onUndo: (key: string) => void;
+  onLater: (key: string) => void;
   onBack: () => void;
 }) {
-  const { result, activeKey, done, onSelect, onToggleDone, onBack } = props;
+  const { result, activeKey, done, onDone, onUndo, onLater, onBack } = props;
   const active = result.findings.find((f) => findingKey(f) === activeKey) ?? result.findings[0];
   if (!active) return null;
   const key = findingKey(active);
   const g = guideFor(active.rule, active.kind);
   const isDone = done.has(key);
+  const at = result.findings.indexOf(active) + 1;
 
   return (
     <main className="screen">
-      <button className="link-btn" onClick={onBack}>&lt; 결과로</button>
-
-      <div className="tabs" role="tablist" aria-label="찾은 항목">
-        {result.findings.map((f) => {
-          const k = findingKey(f);
-          return (
-            <button key={k} role="tab" className="tab" aria-selected={k === key} onClick={() => onSelect(k)}>
-              {done.has(k) ? "✓ " : ""}
-              {f.title}
-            </button>
-          );
-        })}
-      </div>
+      <TopBar backLabel="결과" onBack={onBack} at={at} total={result.findings.length} />
 
       <div>
-        <h1 className="title">{g.title}</h1>
+        <h1 className="title">{taskTitle(active)}</h1>
         <p className="sub">
-          {active.kind === "saving" ? `1년에 약 ${won(active.yearlySaving)} 아낄 수 있어요.` : active.reason}
-          {active.source ? ` (${active.source})` : ""}
+          {active.kind === "saving" ? `1년에 약 ${won(active.yearlySaving)} 아낄 수 있어요.` : "몇 분이면 확인할 수 있어요."}
         </p>
       </div>
 
-      <ol className="steps">
-        {g.steps.map((s, i) => (
-          <li key={i}>
-            <span className="step-no">{i + 1}</span>
-            <span>{s}</span>
-          </li>
+      <ol className="how">
+        {g.steps.map((t, i) => (
+          <li key={i}>{t}</li>
         ))}
       </ol>
 
-      {g.caution && <div className="warn">{g.caution}</div>}
-
-      {g.link && (
-        <a className="btn secondary link-out" href={g.link.href} target="_blank" rel="noopener noreferrer">
-          {g.link.label} 열기
-        </a>
-      )}
+      {g.caution && <p className="caution">{g.caution}</p>}
 
       <div className="spacer" />
-      <button className={isDone ? "btn secondary" : "btn"} onClick={() => onToggleDone(key)}>
-        {isDone ? "완료 취소" : "했어요"}
-      </button>
+      <div className="cta-bar">
+        {g.link && (
+          <a className="btn secondary link-out" href={g.link.href} target="_blank" rel="noopener noreferrer">
+            {g.link.label} 열기
+          </a>
+        )}
+        {isDone ? (
+          <button className="btn secondary" onClick={() => onUndo(key)}>했어요 취소</button>
+        ) : (
+          <>
+            <button className="btn" onClick={() => onDone(key)}>했어요</button>
+            <button className="link-btn center" onClick={() => onLater(key)}>나중에 할게요</button>
+          </>
+        )}
+      </div>
     </main>
   );
 }
