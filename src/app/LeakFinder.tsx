@@ -133,7 +133,7 @@ export default function LeakFinder() {
         onAddShots={(files) =>
           setShots((s) => [
             ...s,
-            ...Array.from(files).map((f) => ({ id: newId(), url: URL.createObjectURL(f), name: f.name, file: f })),
+            ...files.map((f) => ({ id: newId(), url: URL.createObjectURL(f), name: f.name, file: f })),
           ])
         }
         onRemoveShot={(id) =>
@@ -464,7 +464,7 @@ function UploadScreen(props: {
   network: Network | "unknown" | "";
   onNetwork: (n: Network | "unknown") => void;
   shots: Shot[];
-  onAddShots: (files: FileList) => void;
+  onAddShots: (files: File[]) => void;
   onRemoveShot: (id: string) => void;
   onNext: () => void;
   onAutoRead: () => void;
@@ -528,7 +528,10 @@ function UploadScreen(props: {
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files?.length) onAddShots(e.target.files);
+            // 입력칸을 비우면 FileList 도 비워지므로, 상태에 넣기 전에 배열로 복사해 둠.
+            // (복사 없이 넘기면 화면이 한 번 다시 그려진 뒤에는 빈 목록이 들어감: 통신사를 바꾼 뒤 업로드 실패)
+            const picked = Array.from(e.target.files ?? []);
+            if (picked.length) onAddShots(picked);
             e.target.value = "";
           }}
         />
