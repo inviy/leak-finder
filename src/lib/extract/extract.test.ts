@@ -127,6 +127,8 @@ describe("reconcile (검산과 화면 입력값)", () => {
     expect(r.warnings[0].label).toBe("모바일");
     expect(r.warnings[0].message).toContain("76,164원");
     expect(r.warnings[0].message).toContain("244,190원");
+    // 요금계가 더 크면 다른 회선 가능성을 알려 줌
+    expect(r.warnings[0].message).toContain("다른 회선");
   });
 
   it("모바일 입력값: 월정액, 선택약정 모름, 부가서비스 4개, 가산금", () => {

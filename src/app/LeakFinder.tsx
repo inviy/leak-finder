@@ -10,6 +10,7 @@ import {
   newAddon,
   newId,
   newStatement,
+  parseWon,
   toBillInput,
   type AddonDraft,
   type Selective,
@@ -372,6 +373,11 @@ function StatementForm(props: {
       {d.kind !== "device" && (
         <div className="field">
           <span>유료 부가서비스 (이용금액 / 할인금액)</span>
+          {d.addons.some((a) => (parseWon(a.fee) ?? 0) - (parseWon(a.discount) ?? 0) > 0) && (
+            <p className="hint">
+              안 쓰는 서비스는 <b>쓰고 있음</b> 체크를 풀어 주세요. 체크를 푼 것만 1년 절감액에 들어가요.
+            </p>
+          )}
           {d.addons.map((a) => (
             <div key={a.id} className="card" style={{ padding: 12, gap: 8 }}>
               <div className="addon">
