@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { diagnoseAll, type Carrier, type Diagnosis } from "@/lib/diagnose";
+import { diagnoseAll, type Carrier, type Diagnosis, type Finding } from "@/lib/diagnose";
+import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import {
@@ -16,7 +17,7 @@ import {
   type StatementKind,
 } from "@/lib/draft";
 
-type Step = "upload" | "confirm" | "result";
+type Step = "upload" | "confirm" | "result" | "action";
 
 const CARRIERS: { id: Carrier; name: string }[] = [
   { id: "SKT", name: "SKT" },
@@ -44,6 +45,15 @@ export default function LeakFinder() {
   const [activeId, setActiveId] = useState(statements[0].id);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
   const [read, setRead] = useState<ReadState>({ status: "idle" });
+  const [guideKey, setGuideKey] = useState("");
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const toggleDone = (k: string) =>
+    setDone((d) => {
+      const n = new Set(d);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
 
   const autoRead = async () => {
     setRead({ status: "reading" });
@@ -192,7 +202,30 @@ export default function LeakFinder() {
     );
   }
 
-  return <ResultScreen result={result} onBack={() => setStep("confirm")} />;
+  if (step === "action") {
+    return (
+      <ActionScreen
+        result={result}
+        activeKey={guideKey}
+        done={done}
+        onSelect={setGuideKey}
+        onToggleDone={toggleDone}
+        onBack={() => setStep("result")}
+      />
+    );
+  }
+
+  return (
+    <ResultScreen
+      result={result}
+      done={done}
+      onBack={() => setStep("confirm")}
+      onOpenGuide={(k) => {
+        setGuideKey(k);
+        setStep("action");
+      }}
+    />
+  );
 }
 
 function UploadScreen(props: {
@@ -406,7 +439,15 @@ function StatementForm(props: {
   );
 }
 
-function ResultScreen({ result, onBack }: { result: Diagnosis; onBack: () => void }) {
+const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}`;
+
+function ResultScreen(props: {
+  result: Diagnosis;
+  done: Set<string>;
+  onBack: () => void;
+  onOpenGuide: (key: string) => void;
+}) {
+  const { result, done, onBack, onOpenGuide } = props;
   const savings = result.findings.filter((f) => f.kind === "saving");
   const checks = result.findings.filter((f) => f.kind === "check");
   const [copied, setCopied] = useState(false);
@@ -424,6 +465,23 @@ function ResultScreen({ result, onBack }: { result: Diagnosis; onBack: () => voi
     }
   };
 
+  const card = (f: Finding, right: React.ReactNode) => {
+    const key = findingKey(f);
+    return (
+      <button key={key} className="card finding finding-btn" onClick={() => onOpenGuide(key)}>
+        <div className="finding-head">
+          <span>{f.title}</span>
+          {right}
+        </div>
+        <div className="finding-reason">{f.reason}</div>
+        <div className="finding-foot">
+          <span className="finding-source">{f.source}</span>
+          <span className={done.has(key) ? "done-tag" : "go-tag"}>{done.has(key) ? "완료" : "방법 보기 >"}</span>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <main className="screen">
       <button className="link-btn" onClick={onBack}>&lt; 입력 고치기</button>
@@ -436,30 +494,12 @@ function ResultScreen({ result, onBack }: { result: Diagnosis; onBack: () => voi
         </span>
       </div>
 
-      {savings.map((f, i) => (
-        <div key={`s${i}`} className="card finding">
-          <div className="finding-head">
-            <span>{f.title}</span>
-            <span>{won(f.yearlySaving)}</span>
-          </div>
-          <div className="finding-reason">{f.reason}</div>
-          {f.source && <div className="finding-source">{f.source}</div>}
-        </div>
-      ))}
+      {savings.map((f) => card(f, <span>{won(f.yearlySaving)}</span>))}
 
       {checks.length > 0 && (
         <>
           <div className="section-title">직접 확인해 볼 것</div>
-          {checks.map((f, i) => (
-            <div key={`c${i}`} className="card finding">
-              <div className="finding-head">
-                <span>{f.title}</span>
-                <span className="badge">확인</span>
-              </div>
-              <div className="finding-reason">{f.reason}</div>
-              {f.source && <div className="finding-source">{f.source}</div>}
-            </div>
-          ))}
+          {checks.map((f) => card(f, <span className="badge">확인</span>))}
         </>
       )}
 
@@ -470,7 +510,74 @@ function ResultScreen({ result, onBack }: { result: Diagnosis; onBack: () => voi
       <div className="spacer" />
       <div className="btn-row">
         <button className="btn secondary" onClick={share}>{copied ? "복사됨" : "결과 공유"}</button>
+        {result.findings.length > 0 && (
+          <button className="btn" onClick={() => onOpenGuide(findingKey(result.findings[0]))}>줄이는 방법 보기</button>
+        )}
       </div>
+    </main>
+  );
+}
+
+function ActionScreen(props: {
+  result: Diagnosis;
+  activeKey: string;
+  done: Set<string>;
+  onSelect: (key: string) => void;
+  onToggleDone: (key: string) => void;
+  onBack: () => void;
+}) {
+  const { result, activeKey, done, onSelect, onToggleDone, onBack } = props;
+  const active = result.findings.find((f) => findingKey(f) === activeKey) ?? result.findings[0];
+  if (!active) return null;
+  const key = findingKey(active);
+  const g = guideFor(active.rule, active.kind);
+  const isDone = done.has(key);
+
+  return (
+    <main className="screen">
+      <button className="link-btn" onClick={onBack}>&lt; 결과로</button>
+
+      <div className="tabs" role="tablist" aria-label="찾은 항목">
+        {result.findings.map((f) => {
+          const k = findingKey(f);
+          return (
+            <button key={k} role="tab" className="tab" aria-selected={k === key} onClick={() => onSelect(k)}>
+              {done.has(k) ? "✓ " : ""}
+              {f.title}
+            </button>
+          );
+        })}
+      </div>
+
+      <div>
+        <h1 className="title">{g.title}</h1>
+        <p className="sub">
+          {active.kind === "saving" ? `1년에 약 ${won(active.yearlySaving)} 아낄 수 있어요.` : active.reason}
+          {active.source ? ` (${active.source})` : ""}
+        </p>
+      </div>
+
+      <ol className="steps">
+        {g.steps.map((s, i) => (
+          <li key={i}>
+            <span className="step-no">{i + 1}</span>
+            <span>{s}</span>
+          </li>
+        ))}
+      </ol>
+
+      {g.caution && <div className="warn">{g.caution}</div>}
+
+      {g.link && (
+        <a className="btn secondary link-out" href={g.link.href} target="_blank" rel="noopener noreferrer">
+          {g.link.label} 열기
+        </a>
+      )}
+
+      <div className="spacer" />
+      <button className={isDone ? "btn secondary" : "btn"} onClick={() => onToggleDone(key)}>
+        {isDone ? "완료 취소" : "했어요"}
+      </button>
     </main>
   );
 }
