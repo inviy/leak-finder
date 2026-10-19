@@ -270,3 +270,8 @@ button, input, select { font: inherit; color: inherit; }
 .how li::marker { font-weight: 700; }
 .caution { margin: 0; font-size: 15px; line-height: 1.55; color: #7a4d00; background: #fff6e5; border-radius: 12px; padding: 12px 14px; }
 .link-btn.center { text-align: center; padding: 6px 0; font-size: 15px; }
+
+/* 알뜰폰 망 고르기: 통신사 고르기 바로 아래 한 단계 들여쓴 질문 */
+.sub-field { margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--line); }
+.sub-field .chips { flex-wrap: nowrap; gap: 6px; }
+.sub-field .chip { min-width: 0; padding: 0 4px; font-size: 15px; white-space: nowrap; }

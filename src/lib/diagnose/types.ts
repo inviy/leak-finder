@@ -1,5 +1,9 @@
 /** 고지서에서 읽어 내거나 사용자가 직접 고른 입력 */
 export type Carrier = "SKT" | "KT" | "LGU" | "MVNO";
+/** 알뜰폰이 빌려 쓰는 통신사 망 */
+export type Network = "SKT" | "KT" | "LGU";
+/** 고지서 종류 */
+export type StatementType = "mobile" | "device" | "home";
 
 export interface Addon {
   name: string;
@@ -24,6 +28,10 @@ export interface BillInput {
   /** 결과 카드에 보일 이름, 예: "모바일", "인터넷·TV" */
   label?: string;
   carrier: Carrier;
+  /** 알뜰폰일 때 쓰는 망 (모르면 비움). 요금제 비교(R4)에 씀 */
+  network?: Network;
+  /** 고지서 종류. 알뜰폰이라도 인터넷·TV 는 큰 통신사 안내를 씀 */
+  statementType?: StatementType;
   planName: string;
   /** 요금제 월정액 (할인 전, 원). 요금제가 없는 명세서(단말대금 등)는 0 */
   planMonthlyFee: number;
@@ -82,6 +90,8 @@ export interface Finding {
   source?: string;
   /** 같은 규칙 안에서 상황별 안내를 고를 때 (R7: ended, soon, unknown) */
   variant?: string;
+  /** 어느 종류 고지서에서 나왔는지 (안내 문구 고를 때) */
+  statementType?: StatementType;
 }
 
 export interface Diagnosis {

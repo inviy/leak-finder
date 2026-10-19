@@ -178,7 +178,7 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
   const r7 = input.contract ? R7_FINDINGS[input.contract] : undefined;
   if (r7) findings.push({ rule: "R7", kind: "check", yearlySaving: 0, source, variant: input.contract, ...r7 });
 
-  const sorted = sortFindings(findings);
+  const sorted = sortFindings(findings.map((f) => ({ ...f, statementType: input.statementType })));
   return { findings: sorted, yearlyTotal: sumSavings(sorted) };
 }
 
