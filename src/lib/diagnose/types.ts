@@ -42,6 +42,11 @@ export interface BillInput {
   totalAmount?: number;
   /** 지난 달들의 청구 합계 (원, 오래된 달부터). R6 비교용 */
   pastTotals?: number[];
+  /**
+   * 인터넷·TV 약정 상태 (사용자가 답함). 인터넷·TV 고지서에만 씀
+   * ended = 이미 끝남, soon = 3개월 안에 끝남, long = 많이 남음, unknown = 모름
+   */
+  contract?: ContractState;
   /** 한 달 데이터 사용량 (GB), 모르면 비워 둠 */
   monthlyDataUsageGB?: number;
 }
@@ -55,7 +60,9 @@ export interface CatalogPlan {
   dataGB: number;
 }
 
-export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6";
+export type ContractState = "ended" | "soon" | "long" | "unknown";
+
+export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7";
 
 /**
  * saving = 줄일 수 있는 돈 (1년 절감액에 합산)
@@ -73,6 +80,8 @@ export interface Finding {
   yearlySaving: number;
   /** 어느 명세서에서 나왔는지 */
   source?: string;
+  /** 같은 규칙 안에서 상황별 안내를 고를 때 (R7: ended, soon, unknown) */
+  variant?: string;
 }
 
 export interface Diagnosis {

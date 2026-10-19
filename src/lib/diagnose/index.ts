@@ -1,4 +1,4 @@
-import type { BillInput, CatalogPlan, Diagnosis, Finding } from "./types";
+import type { BillInput, CatalogPlan, ContractState, Diagnosis, Finding } from "./types";
 
 export * from "./types";
 
@@ -38,9 +38,17 @@ const sumSavings = (fs: Finding[]) =>
   fs.filter((f) => f.kind === "saving").reduce((s, f) => s + f.yearlySaving, 0);
 
 /** 절감액 큰 순, 확인 항목은 뒤로 */
+/** 확인 항목 순서: 이미 끝난 약정처럼 놓치면 손해가 큰 것부터 */
+function checkRank(f: Finding): number {
+  if (f.rule === "R7") return f.variant === "ended" ? 0 : f.variant === "soon" ? 1 : 3;
+  if (f.rule === "R1") return 2;
+  return 4;
+}
+
 function sortFindings(fs: Finding[]): Finding[] {
   return [...fs].sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === "saving" ? -1 : 1;
+    if (a.kind === "check") return checkRank(a) - checkRank(b);
     return b.yearlySaving - a.yearlySaving;
   });
 }
@@ -165,9 +173,29 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
     }
   }
 
+  // R7 인터넷·TV 약정. 끝나도 요금이 바로 오르지 않는 경우가 많지만,
+  // 재약정이나 통신사 이동 때 받을 혜택을 놓치게 됨. 혜택 금액은 통신사, 시기마다 달라 확인 항목으로 둠
+  const r7 = input.contract ? R7_FINDINGS[input.contract] : undefined;
+  if (r7) findings.push({ rule: "R7", kind: "check", yearlySaving: 0, source, variant: input.contract, ...r7 });
+
   const sorted = sortFindings(findings);
   return { findings: sorted, yearlyTotal: sumSavings(sorted) };
 }
+
+const R7_FINDINGS: Partial<Record<ContractState, { title: string; reason: string }>> = {
+  ended: {
+    title: "인터넷 약정 끝남",
+    reason: "약정이 끝났으면 재약정 혜택(요금 할인, 상품권)이나 다른 통신사 가입 혜택을 받을 수 있어요. 그냥 두면 이 혜택을 놓쳐요",
+  },
+  soon: {
+    title: "인터넷 약정 곧 끝남",
+    reason: "끝나기 전에 지금 통신사의 재약정 혜택과 다른 통신사 가입 혜택을 비교해 두면 좋아요",
+  },
+  unknown: {
+    title: "인터넷 약정 끝나는 날 확인",
+    reason: "보통 3년 약정이에요. 이미 끝났다면 재약정이나 통신사 이동 혜택을 받을 수 있어요",
+  },
+};
 
 /** 고지서 여러 장 (모바일, 단말대금, 인터넷·TV 등)을 한 번에 진단 */
 export function diagnoseAll(inputs: BillInput[], catalog: CatalogPlan[] = []): Diagnosis {

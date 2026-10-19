@@ -1,4 +1,4 @@
-import type { BillInput, Carrier } from "./diagnose";
+import type { BillInput, Carrier, ContractState } from "./diagnose";
 
 /** 화면에서 편집하는 명세서 한 장 (입력 중이라 숫자는 문자열) */
 export type StatementKind = "mobile" | "device" | "home";
@@ -25,6 +25,8 @@ export interface StatementDraft {
   totalAmount: string;
   /** 지난 달 청구액, 쉼표나 공백으로 구분 */
   pastTotals: string;
+  /** 인터넷·TV 약정 상태, 아직 안 물었으면 "" */
+  contract: ContractState | "";
 }
 
 export const KIND_LABEL: Record<StatementKind, string> = {
@@ -53,6 +55,7 @@ export function newStatement(kind: StatementKind): StatementDraft {
     lateFees: "",
     totalAmount: "",
     pastTotals: "",
+    contract: "",
   };
 }
 
@@ -99,5 +102,6 @@ export function toBillInput(d: StatementDraft, carrier: Carrier): BillInput {
     lateFees: parseWon(d.lateFees),
     totalAmount: parseWon(d.totalAmount),
     pastTotals: parseWonList(d.pastTotals),
+    contract: d.kind === "home" && d.contract ? d.contract : undefined,
   };
 }

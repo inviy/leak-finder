@@ -110,3 +110,27 @@ describe("R1 확인 문구 (월정액 할인금액으로 힌트)", () => {
     expect(d.yearlyTotal).toBe(0);
   });
 });
+
+describe("R7 인터넷·TV 약정", () => {
+  const home: BillInput = { label: "인터넷·TV", carrier: "KT", planName: "", planMonthlyFee: 0, hasSelectiveDiscount: true, addons: [], promotions: [] };
+
+  it("끝남, 곧 끝남, 모름은 확인 항목 (금액을 지어내지 않음)", () => {
+    for (const c of ["ended", "soon", "unknown"] as const) {
+      const d = diagnose({ ...home, contract: c });
+      expect(d.findings).toHaveLength(1);
+      expect(d.findings[0]).toMatchObject({ rule: "R7", kind: "check", yearlySaving: 0, variant: c });
+      expect(d.yearlyTotal).toBe(0);
+    }
+  });
+
+  it("많이 남았거나 답이 없으면 아무것도 안 나옴", () => {
+    expect(diagnose({ ...home, contract: "long" }).findings).toHaveLength(0);
+    expect(diagnose(home).findings).toHaveLength(0);
+  });
+
+  it("확인 항목 중 이미 끝난 약정이 선택약정 확인보다 먼저", () => {
+    const mobile: BillInput = { ...home, label: "휴대폰", planMonthlyFee: 62728, planDiscount: 9220, hasSelectiveDiscount: null };
+    const r = diagnoseAll([mobile, { ...home, contract: "ended" }]);
+    expect(r.findings.map((f) => f.rule)).toEqual(["R7", "R1"]);
+  });
+});
