@@ -21,7 +21,14 @@ const has = (it: ExtractedItem, ...words: string[]) =>
   words.some((w) => it.section.includes(w) || it.name.includes(w));
 
 const isPlan = (it: ExtractedItem) => it.section.includes("월정액") || it.name === "월정액" || it.name.includes("기본료");
-const isAddon = (it: ExtractedItem) => it.section.includes("부가서비스");
+/**
+ * 부가서비스가 아닌데 모델이 부가서비스 묶음에 넣을 때가 있는 항목 (실행마다 묶음 이름이 달라짐).
+ * 휴대폰결제(소액결제)나 콘텐츠 이용료는 쓴 만큼 내는 돈이라 "안 쓰는 서비스 해지"로 줄일 수 없음
+ */
+// "단말 분실보험" 같은 진짜 부가서비스를 빼지 않도록 넓은 낱말(단말, 콘텐츠)은 쓰지 않음
+const NOT_ADDON = ["휴대폰결제", "소액결제", "콘텐츠이용료", "콘텐츠 이용료", "정보이용료", "분할상환", "가산금", "명세서분리", "미만할인"];
+const isAddon = (it: ExtractedItem) =>
+  it.section.includes("부가서비스") && !NOT_ADDON.some((w) => it.name.includes(w) || it.section.includes(w));
 const isLateFee = (it: ExtractedItem) => has(it, "가산금");
 
 /** 항목을 더한 값 (이용금액 - 할인) */

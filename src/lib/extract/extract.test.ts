@@ -175,6 +175,22 @@ describe("reconcile (검산과 화면 입력값)", () => {
     expect(r.warnings).toHaveLength(0);
   });
 
+  it("모델이 휴대폰결제, 콘텐츠 이용료를 부가서비스 묶음에 넣어도 부가서비스로 받지 않음", () => {
+    const m = {
+      kind: "mobile",
+      items: [
+        { section: "부가서비스 이용료", name: "캐치콜서비스", amount: 1000 },
+        { section: "부가서비스 이용료", name: "휴대폰결제", amount: 14590 },
+        { section: "부가서비스 이용료", name: "콘텐츠 이용료", amount: 3300 },
+        { section: "부가서비스 이용료", name: "단말 분실보험", amount: 4900 },
+      ],
+      total: null,
+    };
+    const [d] = reconcile(validateExtracted({ statements: [m] })).drafts;
+    // 단말 분실보험은 진짜 부가서비스라 남김
+    expect(d.addons.map((a) => a.name)).toEqual(["캐치콜서비스", "단말 분실보험"]);
+  });
+
   it("같은 종류 명세서가 둘이면 이름을 구분", () => {
     const one = { kind: "mobile", items: [{ name: "월정액", section: "월정액", amount: 1000 }], total: 1000 };
     const r = reconcile(validateExtracted({ statements: [one, one] }));
