@@ -40,7 +40,19 @@
 | 검산 | 항목 합(또는 부가세 포함 합)이 요금계와 10원 이내인지, 아니면 확인 화면에 경고 | `src/lib/extract/reconcile.ts` |
 
 - 이미지는 메모리에서만 처리하고 저장하지 않습니다. 실패 로그에도 이미지나 응답 내용은 남기지 않습니다.
-- `ANTHROPIC_API_KEY`가 없으면 503을 돌려주고, 화면은 직접 입력으로 이어집니다.
+- 인증 정보가 없으면 503을 돌려주고, 화면은 직접 입력으로 이어집니다.
+
+### 인증
+
+| 환경 | 방식 | 환경 변수 |
+| --- | --- | --- |
+| 운영 (Vercel) | **ID 페더레이션**: Vercel이 요청마다 발급하는 OIDC 토큰을 Anthropic 토큰으로 교환, 정적 키 없음 | `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID`, `ANTHROPIC_WORKSPACE_ID` |
+| 로컬 개발 | API 키 | `ANTHROPIC_API_KEY` |
+
+- 운영에 `ANTHROPIC_API_KEY`를 같이 넣으면 키가 먼저 쓰여 페더레이션이 무시됩니다. 운영에는 넣지 않습니다.
+- Anthropic 콘솔 발급자: `https://oidc.vercel.com/leedongwooks-projects` (Vercel 팀 발급자 방식)
+- 규칙 조건: 주체 `owner:leedongwooks-projects:project:leak-finder:environment:production`, 대상 `https://vercel.com/leedongwooks-projects`
+- 페더레이션 ID 는 비밀값이 아닙니다. 토큰 교환과 캐시, 만료 전 갱신은 SDK가 처리합니다 (`src/lib/extract/claude.ts`).
 - 모델 출력은 신뢰하지 않습니다. 공격자가 모델 출력을 완전히 조작해도 할 수 있는 일은 자기 결과 화면에 틀린 숫자를 띄우는 것뿐입니다 (도구 호출 없음, 다른 사용자 데이터 없음, 화면은 글자로만 표시).
 
 ## 개발
