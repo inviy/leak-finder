@@ -16,7 +16,10 @@ export async function GET(req: Request) {
   if (!q) return new Response("잘못된 알림 주소예요.", { status: 400, headers: { "content-type": "text/plain; charset=utf-8" } });
 
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-  const ics = buildIcs(contractReminder(q.date, q.monthKnown, q.endYear, url.origin), stamp);
+  const reminder = contractReminder(q.date, q.endMonth, q.endYear, url.origin);
+  // 예전 주소(m=1)는 끝나는 달을 몰라 예전 제목 그대로
+  if (q.legacyMonthKnown) reminder.title = "다음 달 인터넷 약정 끝나요";
+  const ics = buildIcs(reminder, stamp);
   return new Response(ics, {
     headers: {
       "content-type": "text/calendar; charset=utf-8",

@@ -891,10 +891,11 @@ function ContractReminder({ endYear }: { endYear: number }) {
   }
 
   const { date } = plan;
-  const monthKnown = month > 0;
-  const reminder = contractReminder(date, monthKnown, endYear, window.location.origin);
+  // 3년 약정이라 끝나는 달 = 설치한 달
+  const endMonth = month || undefined;
+  const reminder = contractReminder(date, endMonth, endYear, window.location.origin);
   const phoneLink = (
-    <a className="btn secondary link-out" href={contractReminderPath(date, monthKnown, endYear)} onClick={() => setAdded(true)}>
+    <a className="btn secondary link-out" href={contractReminderPath(date, endMonth, endYear)} onClick={() => setAdded(true)}>
       {added ? "달력에 넣는 중" : isAndroid ? "달력 파일" : "휴대폰 달력에 넣기"}
     </a>
   );
