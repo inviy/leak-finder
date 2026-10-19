@@ -201,3 +201,44 @@ button, input, select { font: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: center;
 }
 .link-out { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+/* ── 확인 단계: 한 화면에 질문 하나 ── */
+.title { font-size: 26px; letter-spacing: -0.02em; }
+.cta-bar { position: sticky; bottom: 0; margin: 0 -20px -32px; padding: 12px 20px 20px; background: linear-gradient(to top, var(--bg) 75%, rgba(245,245,244,0)); display: flex; flex-direction: column; gap: 10px; }
+
+.sum-list, .pick-list { list-style: none; margin: 0; padding: 0; background: var(--card); border-radius: 18px; overflow: hidden; }
+.sum-list li + li, .pick-list li + li { border-top: 1px solid #eeeeec; }
+.sum-row { width: 100%; text-align: left; background: none; border: none; padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; }
+.sum-row:active, .pick:active, .choice:active { background: #f2f2f1; }
+.sum-main { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sum-label { font-size: 17px; font-weight: 600; }
+.sum-amt { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sum-amt::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; border-right: 2px solid #b8b8b8; border-top: 2px solid #b8b8b8; transform: rotate(45deg) translateY(-2px); }
+.sum-desc { font-size: 14px; color: var(--muted); }
+.sum-warn { font-size: 13px; color: #9a6400; }
+.sum-warn::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #e3a008; margin-right: 6px; vertical-align: middle; }
+
+.more summary { font-size: 14px; color: var(--muted); cursor: pointer; list-style: none; padding: 4px 0; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary::before { content: "+ "; }
+.more[open] summary { margin-bottom: 10px; }
+
+.pick { width: 100%; background: none; border: none; text-align: left; padding: 16px 20px; display: grid; grid-template-columns: 24px 1fr auto; gap: 14px; align-items: center; cursor: pointer; }
+.pick-mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #c9c9c7; position: relative; transition: background .15s, border-color .15s; }
+.pick[aria-checked="true"] .pick-mark { background: var(--ink); border-color: var(--ink); }
+.pick[aria-checked="true"] .pick-mark::after { content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border-right: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(45deg); }
+.pick-name { font-size: 16px; line-height: 1.4; word-break: keep-all; overflow-wrap: anywhere; }
+.pick-amt { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pick[aria-checked="true"] .pick-name { font-weight: 600; }
+.pick:focus-visible, .sum-row:focus-visible, .choice:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+/* 고른 만큼 바로 보이는 절감액: 이 화면에서 유일하게 눈에 띄는 것 */
+.live { margin: 0; text-align: center; font-size: 15px; color: var(--quiet); min-height: 24px; }
+.live.on { color: var(--ink); }
+.live b { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+.choice-list { display: flex; flex-direction: column; gap: 10px; }
+.choice { background: var(--card); border: none; border-radius: 16px; padding: 20px; text-align: left; font-size: 17px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.choice span { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) { .pick-mark { transition: none; } }

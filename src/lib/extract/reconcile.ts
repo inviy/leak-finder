@@ -8,6 +8,8 @@ export const VAT_RATE = 0.1;
 
 export interface ReconcileWarning {
   label: string;
+  /** 목록 한 줄에 들어갈 짧은 말 */
+  short: string;
   message: string;
 }
 
@@ -21,7 +23,14 @@ const has = (it: ExtractedItem, ...words: string[]) =>
   words.some((w) => it.section.includes(w) || it.name.includes(w));
 
 const isPlan = (it: ExtractedItem) => it.section.includes("월정액") || it.name === "월정액" || it.name.includes("기본료");
-const isAddon = (it: ExtractedItem) => it.section.includes("부가서비스");
+/**
+ * 부가서비스가 아닌데 모델이 부가서비스 묶음에 넣을 때가 있는 항목 (실행마다 묶음 이름이 달라짐).
+ * 휴대폰결제(소액결제)나 콘텐츠 이용료는 쓴 만큼 내는 돈이라 "안 쓰는 서비스 해지"로 줄일 수 없음
+ */
+// "단말 분실보험" 같은 진짜 부가서비스를 빼지 않도록 넓은 낱말(단말, 콘텐츠)은 쓰지 않음
+const NOT_ADDON = ["휴대폰결제", "소액결제", "콘텐츠이용료", "콘텐츠 이용료", "정보이용료", "분할상환", "가산금", "명세서분리", "미만할인"];
+const isAddon = (it: ExtractedItem) =>
+  it.section.includes("부가서비스") && !NOT_ADDON.some((w) => it.name.includes(w) || it.section.includes(w));
 const isLateFee = (it: ExtractedItem) => has(it, "가산금");
 
 /** 항목을 더한 값 (이용금액 - 할인) */
@@ -85,11 +94,12 @@ export function reconcile(x: Extracted): Reconciled {
             : "잘못 읽은 금액이 있는지 고지서와 비교해 주세요.";
         warnings.push({
           label: d.label,
+          short: s.total > net ? "다른 회선이 같이 청구된 것 같아요" : "항목 합이 요금계와 달라요",
           message: `읽은 항목을 더하면 ${fmt(net)}인데 요금계는 ${fmt(s.total)}이에요. ${why}`,
         });
       }
     } else if (s.total === null) {
-      warnings.push({ label: d.label, message: "요금계를 읽지 못했어요. 이번 달 청구 합계를 직접 넣어 주세요." });
+      warnings.push({ label: d.label, short: "요금계를 못 읽었어요", message: "요금계를 읽지 못했어요. 이번 달 청구 합계를 직접 넣어 주세요." });
     }
   }
 

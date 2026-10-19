@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { diagnoseAll, type Carrier, type Diagnosis, type Finding } from "@/lib/diagnose";
+import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type Diagnosis, type Finding } from "@/lib/diagnose";
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
@@ -13,6 +13,7 @@ import {
   newStatement,
   formatWon,
   parseWon,
+  parseWonList,
   toBillInput,
   type AddonDraft,
   type Selective,
@@ -21,6 +22,8 @@ import {
 } from "@/lib/draft";
 
 type Step = "upload" | "confirm" | "result" | "action";
+/** 확인 단계는 한 화면에 질문 하나: 읽은 금액 → 안 쓰는 서비스 → 선택약정. 고치기는 따로 */
+type ConfirmView = { kind: "summary" } | { kind: "addons" } | { kind: "selective"; id: string } | { kind: "edit"; id: string };
 
 const CARRIERS: { id: Carrier; name: string }[] = [
   { id: "SKT", name: "SKT" },
@@ -40,13 +43,24 @@ type ReadState = { status: "idle" } | { status: "reading" } | { status: "error";
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
+/** 선택약정 질문 화면의 한두 줄 설명. 결과 화면의 긴 설명(selectiveCheckReason)을 줄인 것 */
+function selectiveHint(fee: number, discount?: number): string {
+  const expected = Math.round(fee * SELECTIVE_DISCOUNT_RATE);
+  if (!discount) return "고지서 할인상세에 '선택약정'이 있으면 받고 있는 거예요.";
+  if (Math.abs(discount - expected) <= Math.max(10, expected * 0.02))
+    return `할인 ${won(discount)}이 월정액의 25%와 같아서, 받고 있을 가능성이 높아요.`;
+  return `할인 ${won(discount)}은 선택약정 25%(${won(expected)})와 금액이 달라요.`;
+}
+
 export default function LeakFinder() {
   const [step, setStep] = useState<Step>("upload");
   const [carrier, setCarrier] = useState<Carrier>("KT");
   const [shots, setShots] = useState<Shot[]>([]);
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
-  const [activeId, setActiveId] = useState(statements[0].id);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
+  const [view, setView] = useState<ConfirmView>({ kind: "summary" });
+  /** 선택약정을 이미 물어본 명세서 ("잘 모르겠어요"도 답으로 봄) */
+  const [asked, setAsked] = useState<Set<string>>(new Set());
   const [read, setRead] = useState<ReadState>({ status: "idle" });
   const [guideKey, setGuideKey] = useState("");
   const [done, setDone] = useState<Set<string>>(new Set());
@@ -71,8 +85,9 @@ export default function LeakFinder() {
       }
       const r = reconcile(data as Extracted);
       setStatements(r.drafts);
-      setActiveId(r.drafts[0].id);
       setWarnings(r.warnings);
+      setAsked(new Set());
+      setView({ kind: "summary" });
       setRead({ status: "idle" });
       setStep("confirm");
     } catch {
@@ -95,17 +110,7 @@ export default function LeakFinder() {
   const updateStatement = (id: string, patch: Partial<StatementDraft>) =>
     setStatements((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)));
 
-  const addStatement = (kind: StatementKind) => {
-    const s = newStatement(kind);
-    setStatements((ss) => [...ss, s]);
-    setActiveId(s.id);
-  };
-
-  const removeStatement = (id: string) => {
-    const next = statements.filter((s) => s.id !== id);
-    setStatements(next);
-    if (activeId === id && next[0]) setActiveId(next[0].id);
-  };
+  const removeStatement = (id: string) => setStatements((ss) => ss.filter((s) => s.id !== id));
 
   if (step === "upload") {
     return (
@@ -126,7 +131,12 @@ export default function LeakFinder() {
             return s.filter((x) => x.id !== id);
           })
         }
-        onNext={() => setStep("confirm")}
+        onNext={() => {
+          // 직접 입력은 바로 입력 화면으로
+          setWarnings([]);
+          setView({ kind: "edit", id: statements[0].id });
+          setStep("confirm");
+        }}
         onAutoRead={autoRead}
         read={read}
       />
@@ -134,73 +144,179 @@ export default function LeakFinder() {
   }
 
   if (step === "confirm") {
-    const active = statements.find((s) => s.id === activeId) ?? statements[0];
+    const paidAddons = (d: StatementDraft) =>
+      d.addons.filter((a) => (parseWon(a.fee) ?? 0) - (parseWon(a.discount) ?? 0) > 0 && a.name.trim() !== "");
+    const hasPaidAddons = statements.some((d) => paidAddons(d).length > 0);
+    const nextSelective = (doneIds: Set<string>) =>
+      carrier === "MVNO"
+        ? undefined
+        : statements.find((d) => d.kind === "mobile" && d.selective === "unknown" && !doneIds.has(d.id) && (parseWon(d.planMonthlyFee) ?? 0) > 0);
+    const afterAddons = (doneIds = asked) => {
+      const n = nextSelective(doneIds);
+      if (n) setView({ kind: "selective", id: n.id });
+      else setStep("result");
+    };
+
+    if (view.kind === "edit") {
+      const d = statements.find((x) => x.id === view.id) ?? statements[0];
+      const w = warnings.filter((x) => x.label === d.label);
+      return (
+        <main className="screen">
+          <button className="link-btn" onClick={() => setView({ kind: "summary" })}>&lt; 읽은 금액</button>
+          <h1 className="title">{d.label} 고치기</h1>
+          {w.map((x, i) => (
+            <div key={i} className="warn" role="status">{x.message}</div>
+          ))}
+          <StatementForm
+            key={d.id}
+            draft={d}
+            onChange={(p) => updateStatement(d.id, p)}
+            onRemove={
+              statements.length > 1
+                ? () => {
+                    removeStatement(d.id);
+                    setView({ kind: "summary" });
+                  }
+                : undefined
+            }
+          />
+          <div className="spacer" />
+          <div className="cta-bar">
+            <button className="btn" onClick={() => setView({ kind: "summary" })}>다 고쳤어요</button>
+          </div>
+        </main>
+      );
+    }
+
+    if (view.kind === "addons") {
+      const rows = statements.flatMap((d) => paidAddons(d).map((a) => ({ d, a })));
+      const picked = rows.filter((r) => !r.a.used);
+      const monthly = picked.reduce((s, r) => s + (parseWon(r.a.fee) ?? 0) - (parseWon(r.a.discount) ?? 0), 0);
+      const hidden = statements.reduce((s, d) => s + d.addons.length - paidAddons(d).length, 0);
+      return (
+        <main className="screen">
+          <button className="link-btn" onClick={() => setView({ kind: "summary" })}>&lt; 읽은 금액</button>
+          <div>
+            <h1 className="title">안 쓰는 서비스를<br />골라 주세요</h1>
+            <p className="sub">돈이 나가는 부가서비스만 모았어요.</p>
+          </div>
+          <ul className="pick-list">
+            {rows.map(({ d, a }) => {
+              const net = (parseWon(a.fee) ?? 0) - (parseWon(a.discount) ?? 0);
+              const on = !a.used;
+              return (
+                <li key={a.id}>
+                  <button
+                    className="pick"
+                    role="checkbox"
+                    aria-checked={on}
+                    onClick={() =>
+                      updateStatement(d.id, { addons: d.addons.map((x) => (x.id === a.id ? { ...x, used: !x.used } : x)) })
+                    }
+                  >
+                    <span className="pick-mark" aria-hidden />
+                    <span className="pick-name">{a.name}</span>
+                    <span className="pick-amt">월 {won(net)}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {hidden > 0 && <p className="note">할인으로 0원인 서비스 {hidden}개는 뺐어요.</p>}
+          <div className="spacer" />
+          <div className="cta-bar">
+            <p className={monthly > 0 ? "live on" : "live"} aria-live="polite">
+              {monthly > 0 ? <>끄면 1년에 <b>{won(monthly * 12)}</b> 아껴요</> : "고른 서비스가 없어요"}
+            </p>
+            <button className="btn" onClick={() => afterAddons()}>{picked.length > 0 ? "다음" : "다 쓰고 있어요"}</button>
+          </div>
+        </main>
+      );
+    }
+
+    if (view.kind === "selective") {
+      const d = statements.find((x) => x.id === view.id);
+      if (!d) return null;
+      const answer = (v: Selective) => {
+        updateStatement(d.id, { selective: v });
+        const doneIds = new Set(asked).add(d.id);
+        setAsked(doneIds);
+        afterAddons(doneIds);
+      };
+      return (
+        <main className="screen">
+          <button className="link-btn" onClick={() => setView(hasPaidAddons ? { kind: "addons" } : { kind: "summary" })}>&lt; 이전</button>
+          <div>
+            <h1 className="title">선택약정 할인을<br />받고 있나요?</h1>
+            <p className="sub">{selectiveHint(parseWon(d.planMonthlyFee) ?? 0, parseWon(d.planDiscount))}</p>
+          </div>
+          <div className="choice-list">
+            <button className="choice" onClick={() => answer("yes")}>받고 있어요</button>
+            <button className="choice" onClick={() => answer("no")}>
+              안 받아요
+              <span>신청하면 1년에 약 {won(Math.round((parseWon(d.planMonthlyFee) ?? 0) * SELECTIVE_DISCOUNT_RATE) * 12)}을 아낄 수 있어요</span>
+            </button>
+            <button className="choice" onClick={() => answer("unknown")}>잘 모르겠어요<span>결과에서 확인하는 방법을 알려 드려요</span></button>
+          </div>
+        </main>
+      );
+    }
+
+    // summary: 읽은 금액이 맞는지만 묻는 첫 화면
+    const total = statements.reduce((s, d) => s + (parseWon(d.totalAmount) ?? 0), 0);
+    const describe = (d: StatementDraft) => {
+      const parts: string[] = [];
+      if (d.addons.length) parts.push(`부가서비스 ${d.addons.length}개`);
+      if (parseWon(d.lateFees)) parts.push(`가산금 ${won(parseWon(d.lateFees) ?? 0)}`);
+      if (parseWonList(d.pastTotals).length) parts.push(`지난 달 ${parseWonList(d.pastTotals).length}개월`);
+      return parts.join(", ");
+    };
     return (
       <main className="screen">
         <button className="link-btn" onClick={() => setStep("upload")}>&lt; 처음으로</button>
         <div>
-          <h1 className="title">고지서 내용을 확인해 주세요</h1>
-          <p className="sub">금액이 고지서와 같은지 보고, 쓰지 않는 부가서비스는 체크를 풀어 주세요.</p>
+          <h1 className="title">이번 달 {total > 0 ? won(total) : "통신비"},<br />이렇게 읽었어요</h1>
+          <p className="sub">고지서와 다르면 눌러서 고쳐 주세요.</p>
         </div>
-
-        {warnings.length > 0 && (
-          <div className="warn" role="status">
-            <strong>확인이 필요해요</strong>
-            <ul>
-              {warnings.map((w, i) => (
-                <li key={i}>
-                  <b>{w.label}</b> {w.message}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {shots.length > 0 && (
-          <div className="thumbs row" aria-label="올린 캡처">
-            {shots.map((s) => (
-              <a key={s.id} className="thumb" href={s.url} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={s.url} alt={s.name} />
-              </a>
-            ))}
-          </div>
-        )}
-
-        <div className="tabs" role="tablist" aria-label="명세서">
-          {statements.map((s) => (
-            <button
-              key={s.id}
-              role="tab"
-              className="tab"
-              aria-selected={s.id === active?.id}
-              onClick={() => setActiveId(s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-
-        {active && (
-          <StatementForm
-            key={active.id}
-            draft={active}
-            onChange={(p) => updateStatement(active.id, p)}
-            onRemove={statements.length > 1 ? () => removeStatement(active.id) : undefined}
-          />
-        )}
-
-        <div className="field">
-          <span>명세서 더 넣기</span>
+        <ul className="sum-list">
+          {statements.map((d) => {
+            const w = warnings.find((x) => x.label === d.label);
+            return (
+              <li key={d.id}>
+                <button className="sum-row" onClick={() => setView({ kind: "edit", id: d.id })}>
+                  <span className="sum-main">
+                    <span className="sum-label">{d.label}</span>
+                    <span className="sum-amt">{d.totalAmount ? won(parseWon(d.totalAmount) ?? 0) : "금액 없음"}</span>
+                  </span>
+                  {describe(d) && <span className="sum-desc">{describe(d)}</span>}
+                  {w && <span className="sum-warn">{w.short}</span>}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <details className="more">
+          <summary>명세서 더 넣기</summary>
           <div className="chips">
             {(Object.keys(KIND_LABEL) as StatementKind[]).map((k) => (
-              <button key={k} className="chip" onClick={() => addStatement(k)}>+ {KIND_LABEL[k]}</button>
+              <button
+                key={k}
+                className="chip"
+                onClick={() => {
+                  const s2 = newStatement(k);
+                  setStatements((ss) => [...ss, s2]);
+                  setView({ kind: "edit", id: s2.id });
+                }}
+              >
+                + {KIND_LABEL[k]}
+              </button>
             ))}
           </div>
-        </div>
-
+        </details>
         <div className="spacer" />
-        <button className="btn" onClick={() => setStep("result")}>새는 돈 확인하기</button>
+        <div className="cta-bar">
+          <button className="btn" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>맞아요</button>
+        </div>
       </main>
     );
   }
@@ -222,7 +338,10 @@ export default function LeakFinder() {
     <ResultScreen
       result={result}
       done={done}
-      onBack={() => setStep("confirm")}
+      onBack={() => {
+        setView({ kind: "summary" });
+        setStep("confirm");
+      }}
       onOpenGuide={(k) => {
         setGuideKey(k);
         setStep("action");
