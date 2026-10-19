@@ -55,6 +55,8 @@ export interface BillInput {
    * ended = 이미 끝남, soon = 3개월 안에 끝남, long = 많이 남음, unknown = 모름
    */
   contract?: ContractState;
+  /** 인터넷을 설치한 해 (사용자가 고름). R7 문구와 알림 날짜에 씀 */
+  contractStartYear?: number;
   /** 한 달 데이터 사용량 (GB), 모르면 비워 둠 */
   monthlyDataUsageGB?: number;
 }
@@ -92,6 +94,8 @@ export interface Finding {
   variant?: string;
   /** 어느 종류 고지서에서 나왔는지 (안내 문구 고를 때) */
   statementType?: StatementType;
+  /** R7: 약정이 끝나는 해 (설치한 해 + 3). 달력 알림에 씀 */
+  endYear?: number;
 }
 
 export interface Diagnosis {
