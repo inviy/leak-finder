@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagnose, diagnoseAll, type BillInput } from "./index";
+import { diagnose, diagnoseAll, selectiveCheckReason, type BillInput } from "./index";
 import { ktHomeOctober, ktHomeSeptember, ktMobile } from "./fixtures/kt-2026-10";
 
 const base: BillInput = {
@@ -88,5 +88,25 @@ describe("실제 KT 고지서 (2026년 10월, 금액만)", () => {
       "모바일:R1",
       "인터넷·TV:R6",
     ]);
+  });
+});
+
+describe("R1 확인 문구 (월정액 할인금액으로 힌트)", () => {
+  it("할인이 25% 와 다르면 다른 할인일 수 있다고 알리고, 받을 수 있는 금액을 알려 줌", () => {
+    const r = selectiveCheckReason(62728, 9220);
+    expect(r).toContain("9,220원");
+    expect(r).toContain("15,682원");
+    expect(r).toContain("188,184원");
+  });
+  it("할인이 25% 와 같으면 선택약정일 가능성이 높다고 알림", () => {
+    expect(selectiveCheckReason(62728, 15682)).toContain("가능성이 높");
+  });
+  it("할인금액이 없으면 할인상세 확인 안내", () => {
+    expect(selectiveCheckReason(62728)).toContain("할인상세");
+  });
+  it("확인 항목은 절감액에 더하지 않음", () => {
+    const d = diagnose({ carrier: "KT", planName: "", planMonthlyFee: 62728, planDiscount: 9220, hasSelectiveDiscount: null, addons: [], promotions: [] });
+    expect(d.findings[0].kind).toBe("check");
+    expect(d.yearlyTotal).toBe(0);
   });
 });

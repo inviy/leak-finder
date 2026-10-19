@@ -88,6 +88,10 @@ button, input, select { font: inherit; color: inherit; }
 .drop span { font-size: 13px; color: var(--quiet); }
 
 .thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 확인 화면: 캡처는 참고용이라 한 줄로 작게, 넘치면 옆으로 넘김 */
+.thumbs.row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
+.thumbs.row .thumb { flex: 0 0 auto; width: 56px; height: 72px; }
+.note.center { text-align: center; }
 .thumb { position: relative; width: 72px; height: 96px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .thumb button {

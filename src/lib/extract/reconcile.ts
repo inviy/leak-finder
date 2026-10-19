@@ -35,6 +35,7 @@ function toDraft(s: ExtractedStatement): StatementDraft {
     const plan = s.items.find(isPlan);
     if (plan) {
       d.planMonthlyFee = String(plan.amount);
+      if (plan.discount > 0) d.planDiscount = String(plan.discount);
       // 할인이 합계로만 찍혀 무슨 할인인지 알 수 없음 → 사용자가 확인
       d.selective = plan.discount > 0 ? "unknown" : "no";
     }

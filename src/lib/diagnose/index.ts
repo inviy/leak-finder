@@ -46,6 +46,22 @@ function sortFindings(fs: Finding[]): Finding[] {
 }
 
 /** 고지서 한 장 진단 */
+/**
+ * 선택약정 여부를 모를 때, 월정액 할인금액이 25% 와 맞는지로 힌트를 줌.
+ * 금액만으로 단정하지 않으므로 결과는 항상 "확인" 이고 절감액에 더하지 않음.
+ */
+export function selectiveCheckReason(fee: number, discount?: number): string {
+  const expected = won(fee * SELECTIVE_DISCOUNT_RATE);
+  if (!discount) return "고지서만으로는 선택약정을 받는지 알 수 없어요. 할인상세 화면에서 '선택약정'이 있는지 확인해 보세요";
+  if (Math.abs(discount - expected) <= Math.max(10, expected * 0.02)) {
+    return `월정액 할인 ${fmt(discount)}이 월정액의 25%와 같아요. 선택약정일 가능성이 높으니 할인상세에서 확인만 해 보세요`;
+  }
+  return (
+    `월정액 할인 ${fmt(discount)}은 선택약정 25%(${fmt(expected)})와 금액이 달라요. 결합할인 같은 다른 할인일 수 있어요. ` +
+    `선택약정이 아니라면 1년에 약 ${fmt(expected * 12)}을 더 아낄 수 있어요`
+  );
+}
+
 export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnosis {
   const findings: Finding[] = [];
   const source = input.label;
@@ -70,7 +86,7 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
         rule: "R1",
         kind: "check",
         title: "선택약정 할인 여부 확인 필요",
-        reason: "할인이 합계로만 찍혀 있어요. 할인상세 화면을 올려 주면 정확히 볼 수 있어요",
+        reason: selectiveCheckReason(input.planMonthlyFee, input.planDiscount),
         yearlySaving: 0,
         source,
       });

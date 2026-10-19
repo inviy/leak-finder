@@ -157,7 +157,7 @@ export default function LeakFinder() {
         )}
 
         {shots.length > 0 && (
-          <div className="thumbs" aria-label="올린 캡처">
+          <div className="thumbs row" aria-label="올린 캡처">
             {shots.map((s) => (
               <a key={s.id} className="thumb" href={s.url} target="_blank" rel="noreferrer">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -312,6 +312,11 @@ function UploadScreen(props: {
           <button className="btn" onClick={onAutoRead} disabled={reading || shots.length > MAX_IMAGES}>
             {reading ? "읽는 중..." : shots.length > MAX_IMAGES ? `${MAX_IMAGES}장까지만 올려 주세요` : "자동으로 읽기"}
           </button>
+          {reading && (
+            <p className="note center" role="status">
+              캡처 장수에 따라 10~30초 걸려요. 이 화면을 닫지 말고 기다려 주세요.
+            </p>
+          )}
           <button className="btn secondary" onClick={onNext} disabled={reading}>직접 입력하기</button>
         </>
       ) : (
@@ -353,6 +358,10 @@ function StatementForm(props: {
           <label className="field">
             <span>요금제 월정액 (할인 전)</span>
             <WonInput label="요금제 월정액" value={d.planMonthlyFee} onChange={(v) => onChange({ planMonthlyFee: v })} />
+          </label>
+          <label className="field">
+            <span>월정액 할인 (고지서의 할인금액)</span>
+            <WonInput label="월정액 할인" value={d.planDiscount} onChange={(v) => onChange({ planDiscount: v })} />
           </label>
           <div className="field">
             <span>선택약정 할인 (월정액 25%)</span>
@@ -463,10 +472,12 @@ function ResultScreen(props: {
 
   const share = async () => {
     const text = `새는돈: 지금 그대로 두면 1년에 ${won(result.yearlyTotal)} 새고 있대요.`;
+    // 받은 사람이 바로 해 볼 수 있게 주소를 같이 보냄
+    const url = window.location.origin;
     try {
-      if (navigator.share) await navigator.share({ text });
+      if (navigator.share) await navigator.share({ text, url });
       else {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(`${text}\n${url}`);
         setCopied(true);
       }
     } catch {

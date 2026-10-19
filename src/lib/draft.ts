@@ -17,6 +17,8 @@ export interface StatementDraft {
   kind: StatementKind;
   label: string;
   planMonthlyFee: string;
+  /** 월정액 줄의 할인금액 */
+  planDiscount: string;
   selective: Selective;
   addons: AddonDraft[];
   lateFees: string;
@@ -45,6 +47,7 @@ export function newStatement(kind: StatementKind): StatementDraft {
     kind,
     label: KIND_LABEL[kind],
     planMonthlyFee: "",
+    planDiscount: "",
     selective: kind === "mobile" ? "unknown" : "yes",
     addons: [],
     lateFees: "",
@@ -82,6 +85,7 @@ export function toBillInput(d: StatementDraft, carrier: Carrier): BillInput {
     planName: "",
     // 요금제가 있는 건 모바일만. 단말대금, 인터넷·TV 는 R1 판단 안 함
     planMonthlyFee: d.kind === "mobile" ? parseWon(d.planMonthlyFee) ?? 0 : 0,
+    planDiscount: d.kind === "mobile" ? parseWon(d.planDiscount) : undefined,
     hasSelectiveDiscount: selective,
     addons: d.addons
       .filter((a) => a.name.trim() !== "" && parseWon(a.fee) !== undefined)
