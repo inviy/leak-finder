@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { buildIcs, contractReminderDate, googleCalendarUrl, planContractReminder, type Reminder } from "./reminder";
+import {
+  buildIcs,
+  contractReminder,
+  contractReminderDate,
+  contractReminderPath,
+  foldLine,
+  googleCalendarUrl,
+  parseReminderQuery,
+  planContractReminder,
+  type Reminder,
+} from "./reminder";
 
 const r: Reminder = {
   title: "인터넷 약정 끝나는 달, 재약정 혜택 비교",
@@ -53,5 +63,42 @@ describe("약정 알림 날짜를 오늘 기준으로", () => {
   });
   it("12월이면 다음 해 1월 1일", () => {
     expect(planContractReminder(2026, undefined, { year: 2026, month: 12, day: 5 })).toEqual({ kind: "remind", date: { year: 2027, month: 1, day: 1 } });
+  });
+});
+
+describe("달력 파일 줄 접기 (RFC 5545)", () => {
+  const bytes = (t: string) => new TextEncoder().encode(t).length;
+  it("모든 줄이 75바이트 이하이고, 펼치면 원래 글", () => {
+    const ics = buildIcs(contractReminder({ year: 2026, month: 11, day: 1 }, true, 2026, "https://leak-finder-five.vercel.app"), "20261019T080000Z");
+    const lines = ics.split("\r\n");
+    expect(Math.max(...lines.map(bytes))).toBeLessThanOrEqual(75);
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain("DESCRIPTION:새는돈 알림: 지금 통신사에 재약정 혜택을 물어보고\\, 다른 통신사 가입 혜택과 비교해 보세요. https://leak-finder-five.vercel.app");
+  });
+  it("짧은 줄은 그대로, 한글이 중간에서 안 잘림", () => {
+    expect(foldLine("SUMMARY:짧음")).toBe("SUMMARY:짧음");
+    const long = "X:" + "가".repeat(60);
+    for (const part of foldLine(long).split("\r\n")) expect(() => decodeURIComponent(encodeURIComponent(part))).not.toThrow();
+    expect(foldLine(long).replace(/\r\n /g, "")).toBe(long);
+  });
+});
+
+describe("달력 파일 주소 검사", () => {
+  const today = { year: 2026, month: 10, day: 19 };
+  const q = (s: string) => new URLSearchParams(s);
+  it("화면이 만든 주소는 통과", () => {
+    const path = contractReminderPath({ year: 2027, month: 2, day: 1 }, true, 2027);
+    expect(parseReminderQuery(new URL(path, "https://x").searchParams, today)).toEqual({
+      date: { year: 2027, month: 2, day: 1 },
+      monthKnown: true,
+      endYear: 2027,
+    });
+  });
+  it("없는 날짜, 형식 오류, 먼 미래, 해가 어긋난 값은 거절", () => {
+    expect(parseReminderQuery(q("d=20270230&m=1&y=2027"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=2027-02-01&m=1&y=2027"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=20270201&m=2&y=2027"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=20500101&m=0&y=2050"), today)).toBeNull();
+    expect(parseReminderQuery(q("d=20270201&m=1&y=2030"), today)).toBeNull();
   });
 });
