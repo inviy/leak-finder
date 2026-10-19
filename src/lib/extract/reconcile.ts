@@ -77,9 +77,14 @@ export function reconcile(x: Extracted): Reconciled {
       // 인터넷·TV 명세서는 항목이 부가세 전 금액이고 요금계만 부가세 포함인 경우가 있음
       const matches = [net, net * (1 + VAT_RATE)].some((v) => Math.abs(v - s.total!) <= SUM_TOLERANCE);
       if (!matches) {
+        // 요금계가 더 크면 대개 같은 명세서에 다른 회선이 함께 청구됐거나 캡처가 잘린 경우
+        const why =
+          s.total > net
+            ? "다른 회선이 함께 청구됐거나 캡처에 안 찍힌 항목이 있을 수 있어요. 이 회선 금액이 고지서와 같으면 그대로 두셔도 돼요."
+            : "잘못 읽은 금액이 있는지 고지서와 비교해 주세요.";
         warnings.push({
           label: d.label,
-          message: `읽은 항목을 더하면 ${fmt(net)}인데 요금계는 ${fmt(s.total)}이에요. 빠지거나 잘못 읽은 금액이 있는지 확인해 주세요.`,
+          message: `읽은 항목을 더하면 ${fmt(net)}인데 요금계는 ${fmt(s.total)}이에요. ${why}`,
         });
       }
     } else if (s.total === null) {

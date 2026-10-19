@@ -135,6 +135,7 @@ button, input, select { font: inherit; color: inherit; }
 .seg button[aria-pressed="true"] { border: 2px solid var(--ink); font-weight: 700; }
 
 .addon { display: grid; grid-template-columns: 1fr 104px 32px; gap: 8px; align-items: center; }
+.hint { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 13px; line-height: 1.5; color: #333; }
 .addon-used { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .addon-used input { width: 18px; height: 18px; }
 .icon-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #cccccc; background: var(--card); cursor: pointer; }
