@@ -1,8 +1,12 @@
 import "server-only";
+import Anthropic from "@anthropic-ai/sdk";
+import { oidcFederationProvider } from "@anthropic-ai/sdk/lib/credentials/oidc-federation";
+import { getVercelOidcToken } from "@vercel/oidc";
+import { resolveAuth } from "./auth";
 import { pickJson, validateExtracted, type Extracted } from "./schema";
 
 export const EXTRACT_MODEL = "claude-haiku-5-5";
-const API_URL = "https://api.anthropic.com/v1/messages";
+const BASE_URL = "https://api.anthropic.com";
 const MAX_OUTPUT_TOKENS = 4000;
 const TIMEOUT_MS = 45_000;
 
@@ -48,45 +52,56 @@ export interface ImageInput {
 
 export class NotConfiguredError extends Error {}
 
-export async function extractFromImages(images: ImageInput[]): Promise<Extracted> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new NotConfiguredError("ANTHROPIC_API_KEY 없음");
+let client: Anthropic | null = null;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-    },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    body: JSON.stringify({
-      model: EXTRACT_MODEL,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...images.map((img) => ({
-              type: "image",
-              source: { type: "base64", media_type: img.mediaType, data: img.base64 },
-            })),
-            { type: "text", text: "위 고지서 캡처를 규칙에 맞는 JSON 으로 옮겨 주세요." },
-          ],
-        },
-      ],
-    }),
+/** 서버 인스턴스마다 하나. SDK 가 페더레이션 토큰을 캐시하고 만료 전에 새로 받음 */
+function getClient(): Anthropic {
+  if (client) return client;
+  const auth = resolveAuth(process.env);
+  if (auth.kind === "none") throw new NotConfiguredError("Claude API 인증 정보 없음");
+
+  if (auth.kind === "api_key") {
+    client = new Anthropic({ timeout: TIMEOUT_MS, maxRetries: 1 });
+  } else {
+    client = new Anthropic({
+      timeout: TIMEOUT_MS,
+      maxRetries: 1,
+      credentials: oidcFederationProvider({
+        // 요청 처리 중에 불려서 Vercel 이 이번 요청에 붙여 준 OIDC 토큰을 꺼냄
+        identityTokenProvider: () => getVercelOidcToken(),
+        federationRuleId: auth.federationRuleId,
+        organizationId: auth.organizationId,
+        serviceAccountId: auth.serviceAccountId,
+        workspaceId: auth.workspaceId,
+        baseURL: BASE_URL,
+        fetch: globalThis.fetch,
+      }),
+    });
+  }
+  return client;
+}
+
+export async function extractFromImages(images: ImageInput[]): Promise<Extracted> {
+  const res = await getClient().messages.create({
+    model: EXTRACT_MODEL,
+    max_tokens: MAX_OUTPUT_TOKENS,
+    system: SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          ...images.map((img) => ({
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: img.mediaType, data: img.base64 },
+          })),
+          { type: "text" as const, text: "위 고지서 캡처를 규칙에 맞는 JSON 으로 옮겨 주세요." },
+        ],
+      },
+    ],
   });
 
-  if (!res.ok) {
-    // 응답 본문에는 요청 일부가 섞일 수 있어 상태 코드만 남김
-    throw new Error(`모델 호출 실패: HTTP ${res.status}`);
-  }
-
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] };
-  const text = (data.content ?? [])
-    .filter((b) => b.type === "text" && typeof b.text === "string")
+  const text = res.content
+    .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
     .map((b) => b.text)
     .join("\n");
 
