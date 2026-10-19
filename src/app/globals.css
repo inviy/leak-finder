@@ -134,7 +134,10 @@ button, input, select { font: inherit; color: inherit; }
 }
 .seg button[aria-pressed="true"] { border: 2px solid var(--ink); font-weight: 700; }
 
-.addon { display: grid; grid-template-columns: 1fr 104px 32px; gap: 8px; align-items: center; }
+.addon-name { display: grid; grid-template-columns: 1fr 32px; gap: 8px; align-items: start; }
+/* 긴 서비스 이름(예: KT365폰케어_파손_플러스서비스)이 잘리지 않게 줄바꿈하고 높이를 내용에 맞춤 */
+.addon-name textarea { resize: none; field-sizing: content; height: auto; min-height: 44px; padding: 11px 12px; line-height: 1.4; font: inherit; word-break: break-all; }
+.addon-amounts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .hint { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--soft); font-size: 13px; line-height: 1.5; color: #333; }
 .addon-used { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .addon-used input { width: 18px; height: 18px; }

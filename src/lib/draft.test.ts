@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { diagnoseAll } from "./diagnose";
-import { newAddon, newStatement, parseWon, parseWonList, toBillInput } from "./draft";
+import { formatWon, newAddon, newStatement, parseWon, parseWonList, toBillInput } from "./draft";
+
+describe("formatWon (입력칸 표시)", () => {
+  it("천 단위 쉼표", () => {
+    expect(formatWon("62728")).toBe("62,728");
+    expect(formatWon("1000000")).toBe("1,000,000");
+    expect(formatWon("430")).toBe("430");
+  });
+  it("숫자 아닌 글자와 앞자리 0은 버리고, 빈 값은 빈 값", () => {
+    expect(formatWon("6,2a728원")).toBe("62,728");
+    expect(formatWon("007")).toBe("7");
+    expect(formatWon("0")).toBe("0");
+    expect(formatWon("")).toBe("");
+  });
+  it("표시값을 다시 읽으면 원래 숫자", () => {
+    expect(parseWon(formatWon("104640"))).toBe(104640);
+  });
+});
 
 describe("parseWon", () => {
   it("쉼표, 원, 공백을 지움", () => {

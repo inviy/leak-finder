@@ -51,7 +51,7 @@ function toDraft(s: ExtractedStatement): StatementDraft {
   const late = s.items.filter(isLateFee).reduce((sum, it) => sum + it.amount - it.discount, 0);
   if (late > 0) d.lateFees = String(late);
   if (s.total !== null) d.totalAmount = String(s.total);
-  if (s.pastTotals.length > 0) d.pastTotals = s.pastTotals.join(", ");
+  if (s.pastTotals.length > 0) d.pastTotals = s.pastTotals.map((n) => n.toLocaleString("ko-KR")).join(", ");
   return d;
 }
 
