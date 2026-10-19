@@ -28,8 +28,8 @@ export interface StatementDraft {
 }
 
 export const KIND_LABEL: Record<StatementKind, string> = {
-  mobile: "모바일",
-  device: "단말대금",
+  mobile: "휴대폰",
+  device: "휴대폰 할부금",
   home: "인터넷·TV",
 };
 
