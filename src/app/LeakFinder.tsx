@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type Diagnosis, type Finding } from "@/lib/diagnose";
+import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Diagnosis, type Finding } from "@/lib/diagnose";
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
@@ -23,7 +23,12 @@ import {
 
 type Step = "upload" | "confirm" | "result" | "action";
 /** 확인 단계는 한 화면에 질문 하나: 읽은 금액 → 안 쓰는 서비스 → 선택약정. 고치기는 따로 */
-type ConfirmView = { kind: "summary" } | { kind: "addons" } | { kind: "selective"; id: string } | { kind: "edit"; id: string };
+type ConfirmView =
+  | { kind: "summary" }
+  | { kind: "addons" }
+  | { kind: "selective"; id: string }
+  | { kind: "contract"; id: string }
+  | { kind: "edit"; id: string };
 
 const CARRIERS: { id: Carrier; name: string }[] = [
   { id: "SKT", name: "SKT" },
@@ -160,11 +165,22 @@ export default function LeakFinder() {
         : statements
             .filter((d) => d.kind === "mobile" && (parseWon(d.planMonthlyFee) ?? 0) > 0 && (d.selective === "unknown" || asked.has(d.id)))
             .map((d) => d.id);
-    const totalSteps = 1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length;
+    // 인터넷·TV 약정은 인터넷·TV 고지서마다 한 번 물음
+    const contractIds = statements.filter((d) => d.kind === "home" && (d.contract === "" || asked.has(d.id))).map((d) => d.id);
+    const nextContract = (doneIds: Set<string>) =>
+      statements.find((d) => d.kind === "home" && d.contract === "" && !doneIds.has(d.id));
+    const totalSteps = 1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length + contractIds.length;
     const afterAddons = (doneIds = asked) => {
       const n = nextSelective(doneIds);
+      const c = nextContract(doneIds);
       if (n) setView({ kind: "selective", id: n.id });
+      else if (c) setView({ kind: "contract", id: c.id });
       else setStep("result");
+    };
+    const answered = (id: string) => {
+      const doneIds = new Set(asked).add(id);
+      setAsked(doneIds);
+      afterAddons(doneIds);
     };
 
     if (view.kind === "edit") {
@@ -249,9 +265,7 @@ export default function LeakFinder() {
       if (!d) return null;
       const answer = (v: Selective) => {
         updateStatement(d.id, { selective: v });
-        const doneIds = new Set(asked).add(d.id);
-        setAsked(doneIds);
-        afterAddons(doneIds);
+        answered(d.id);
       };
       return (
         <main className="screen">
@@ -272,6 +286,42 @@ export default function LeakFinder() {
               <span>신청하면 1년에 약 {won(Math.round((parseWon(d.planMonthlyFee) ?? 0) * SELECTIVE_DISCOUNT_RATE) * 12)}을 아낄 수 있어요</span>
             </button>
             <button className="choice" onClick={() => answer("unknown")}>잘 모르겠어요<span>결과에서 확인하는 방법을 알려 드려요</span></button>
+          </div>
+        </main>
+      );
+    }
+
+    if (view.kind === "contract") {
+      const d = statements.find((x) => x.id === view.id);
+      if (!d) return null;
+      const answer = (v: ContractState) => {
+        updateStatement(d.id, { contract: v });
+        answered(d.id);
+      };
+      const prev = selectiveIds.at(-1);
+      return (
+        <main className="screen">
+          <TopBar
+            backLabel="이전"
+            onBack={() =>
+              setView(prev ? { kind: "selective", id: prev } : hasPaidAddons ? { kind: "addons" } : { kind: "summary" })
+            }
+            at={1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length + contractIds.indexOf(d.id) + 1}
+            total={totalSteps}
+          />
+          <div>
+            <h1 className="title">인터넷 약정,<br />언제 끝나나요?</h1>
+            <p className="sub">보통 3년 약정이라, 가입한 지 3년이 지났다면 끝났을 가능성이 높아요.</p>
+          </div>
+          <div className="choice-list">
+            <button className="choice" onClick={() => answer("ended")}>
+              이미 끝났어요<span>재약정이나 이동 혜택을 받을 수 있어요</span>
+            </button>
+            <button className="choice" onClick={() => answer("soon")}>3개월 안에 끝나요</button>
+            <button className="choice" onClick={() => answer("long")}>아직 많이 남았어요</button>
+            <button className="choice" onClick={() => answer("unknown")}>
+              잘 모르겠어요<span>결과에서 확인하는 방법을 알려 드려요</span>
+            </button>
           </div>
         </main>
       );
@@ -553,6 +603,26 @@ function StatementForm(props: {
         </>
       )}
 
+      {d.kind === "home" && (
+        <div className="field">
+          <span>인터넷 약정</span>
+          <div className="seg">
+            {(
+              [
+                ["ended", "끝남"],
+                ["soon", "곧 끝남"],
+                ["long", "많이 남음"],
+                ["unknown", "모름"],
+              ] as [ContractState, string][]
+            ).map(([v, t]) => (
+              <button key={v} aria-pressed={d.contract === v} onClick={() => onChange({ contract: v })}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {d.kind !== "device" && (
         <div className="field">
           <span>유료 부가서비스 (이용금액 / 할인금액)</span>
@@ -633,7 +703,7 @@ const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}`;
 /** 결과, 조치 화면에서 쓰는 짧은 할 일 이름 */
 function taskTitle(f: Finding): string {
   if (f.rule === "R2" && f.kind === "saving") return f.title.replace("안 쓰는 부가서비스", "안 쓰는 서비스") + " 끄기";
-  return guideFor(f.rule, f.kind).title;
+  return guideFor(f.rule, f.kind, undefined, f.variant).title;
 }
 
 function ResultScreen(props: {
@@ -753,7 +823,7 @@ function ActionScreen(props: {
   const active = result.findings.find((f) => findingKey(f) === activeKey) ?? result.findings[0];
   if (!active) return null;
   const key = findingKey(active);
-  const g = guideFor(active.rule, active.kind);
+  const g = guideFor(active.rule, active.kind, undefined, active.variant);
   const isDone = done.has(key);
   const at = result.findings.indexOf(active) + 1;
 

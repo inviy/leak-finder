@@ -35,6 +35,18 @@ describe("parseWon", () => {
   });
 });
 
+describe("toBillInput 인터넷 약정", () => {
+  it("인터넷·TV 고지서만 약정 상태를 넘기고, 안 물은 값은 비움", () => {
+    const h = newStatement("home");
+    expect(toBillInput(h, "KT").contract).toBeUndefined();
+    h.contract = "ended";
+    expect(toBillInput(h, "KT").contract).toBe("ended");
+    const m = newStatement("mobile");
+    m.contract = "ended";
+    expect(toBillInput(m, "KT").contract).toBeUndefined();
+  });
+});
+
 describe("toBillInput", () => {
   it("이름이나 금액이 빈 부가서비스는 버림", () => {
     const d = newStatement("mobile");

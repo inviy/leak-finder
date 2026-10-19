@@ -30,6 +30,18 @@ describe("guideFor", () => {
     }
   });
 
+  it("인터넷 약정은 상황마다 다른 안내, 금액이나 통신사별 번호를 지어내지 않음", () => {
+    const titles = ["ended", "soon", "unknown"].map((v) => guideFor("R7", "check", undefined, v).title);
+    expect(new Set(titles).size).toBe(3);
+    for (const v of ["ended", "soon", "unknown"]) {
+      const g = guideFor("R7", "check", undefined, v);
+      const text = [...g.steps, g.caution ?? ""].join(" ");
+      expect(text).not.toMatch(/\d+만\s?원|\d{1,3}(,\d{3})+원/);
+      expect(text).not.toMatch(/\d{3,4}-\d{3,4}/);
+    }
+    expect(guideFor("R7", "check", undefined, "ended").steps.join(" ")).toContain("위약금이 없어요");
+  });
+
   it("링크는 https", () => {
     for (const r of RULES) {
       const href = guideFor(r, "saving").link?.href;
