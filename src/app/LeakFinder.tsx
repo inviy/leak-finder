@@ -6,7 +6,7 @@ import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import { MAX_IMAGES } from "@/lib/extract/limits";
-import { buildIcs, googleCalendarUrl, planContractReminder, type Reminder } from "@/lib/reminder";
+import { contractReminder, contractReminderPath, googleCalendarUrl, planContractReminder } from "@/lib/reminder";
 import {
   KIND_LABEL,
   newAddon,
@@ -858,6 +858,8 @@ function ResultScreen(props: {
 function ContractReminder({ endYear }: { endYear: number }) {
   const [month, setMonth] = useState(0);
   const [added, setAdded] = useState(false);
+  // 조치 화면에서만 그려지므로(서버 렌더 없음) 바로 기기 확인
+  const [isAndroid] = useState(() => /Android/i.test(navigator.userAgent));
   const now = new Date();
   const plan = planContractReminder(endYear, month || undefined, {
     year: now.getFullYear(),
@@ -889,35 +891,23 @@ function ContractReminder({ endYear }: { endYear: number }) {
   }
 
   const { date } = plan;
-  const reminder: Reminder = {
-    id: `r7-${date.year}-${date.month}`,
-    title: month ? "다음 달 인터넷 약정 끝나요" : `${endYear}년, 인터넷 약정 끝나는 해예요`,
-    details:
-      "새는돈 알림: 지금 통신사에 재약정 혜택을 물어보고, 다른 통신사 가입 혜택과 비교해 보세요. " +
-      (typeof window === "undefined" ? "" : window.location.origin),
-    date,
-  };
-  const addToPhone = () => {
-    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
-    const url = URL.createObjectURL(new Blob([buildIcs(reminder, stamp)], { type: "text/calendar;charset=utf-8" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "internet-contract-reminder.ics";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setAdded(true);
-  };
+  const monthKnown = month > 0;
+  const reminder = contractReminder(date, monthKnown, endYear, window.location.origin);
+  const phoneLink = (
+    <a className="btn secondary link-out" href={contractReminderPath(date, monthKnown, endYear)} onClick={() => setAdded(true)}>
+      {added ? "달력에 넣는 중" : isAndroid ? "달력 파일" : "휴대폰 달력에 넣기"}
+    </a>
+  );
+  const googleLink = (
+    <a className="btn secondary link-out" href={googleCalendarUrl(reminder)} target="_blank" rel="noopener noreferrer">
+      {isAndroid ? "구글 캘린더에 넣기" : "구글 캘린더"}
+    </a>
+  );
   return (
     <div className="remind">
       {monthPicker}
-      <div className="btn-row">
-        <button className="btn secondary" onClick={addToPhone}>{added ? "달력 파일 받음" : "휴대폰 달력에 넣기"}</button>
-        <a className="btn secondary link-out" href={googleCalendarUrl(reminder)} target="_blank" rel="noopener noreferrer">
-          구글 캘린더
-        </a>
-      </div>
+      {/* 안드로이드는 달력 파일이 받아지기만 하는 경우가 있어 구글 캘린더를 앞에 */}
+      <div className="btn-row">{isAndroid ? <>{googleLink}{phoneLink}</> : <>{phoneLink}{googleLink}</>}</div>
       <p className="note">{date.year}년 {date.month}월 {date.day}일 아침에 알려 드려요. 가입은 필요 없어요.</p>
     </div>
   );
