@@ -49,7 +49,11 @@ export async function POST(req: Request) {
     return NextResponse.json(extracted, { headers: { "cache-control": "no-store" } });
   } catch (e) {
     if (e instanceof NotConfiguredError) return err(503, "not_configured", "자동 읽기가 아직 준비되지 않았어요. 직접 입력해 주세요.");
-    if (e instanceof ExtractError) return err(422, "unreadable", "고지서를 읽지 못했어요. 다른 캡처를 올리거나 직접 입력해 주세요.");
+    if (e instanceof ExtractError) {
+      // 이미지나 응답 내용은 남기지 않고, 왜 못 읽었는지(종류)만 기록
+      console.warn("extract unreadable:", e.message, `images=${images.length}`);
+      return err(422, "unreadable", "고지서를 읽지 못했어요. 다른 캡처를 올리거나 직접 입력해 주세요.");
+    }
     // 이미지나 응답 내용은 남기지 않고 종류만 기록
     console.error("extract failed:", e instanceof Error ? e.message : "unknown");
     return err(502, "upstream", "잠시 후 다시 시도해 주세요.");
