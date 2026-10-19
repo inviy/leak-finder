@@ -52,13 +52,13 @@ function sortFindings(fs: Finding[]): Finding[] {
  */
 export function selectiveCheckReason(fee: number, discount?: number): string {
   const expected = won(fee * SELECTIVE_DISCOUNT_RATE);
-  if (!discount) return "고지서만으로는 선택약정을 받는지 알 수 없어요. 할인상세 화면에서 '선택약정'이 있는지 확인해 보세요";
+  if (!discount) return "고지서만으로는 요금 25% 할인(선택약정)을 받는지 알 수 없어요. 할인 내역에서 '선택약정'이 있는지 확인해 보세요";
   if (Math.abs(discount - expected) <= Math.max(10, expected * 0.02)) {
-    return `월정액 할인 ${fmt(discount)}이 월정액의 25%와 같아요. 선택약정일 가능성이 높으니 할인상세에서 확인만 해 보세요`;
+    return `기본 요금 할인 ${fmt(discount)}이 기본 요금의 25%와 같아요. 요금 25% 할인(선택약정)일 가능성이 높으니 할인 내역에서 확인만 해 보세요`;
   }
   return (
-    `월정액 할인 ${fmt(discount)}은 선택약정 25%(${fmt(expected)})와 금액이 달라요. 결합할인 같은 다른 할인일 수 있어요. ` +
-    `선택약정이 아니라면 1년에 약 ${fmt(expected * 12)}을 더 아낄 수 있어요`
+    `기본 요금 할인 ${fmt(discount)}은 요금 25% 할인(선택약정, ${fmt(expected)})과 금액이 달라요. 가족 결합 같은 다른 할인일 수 있어요. ` +
+    `25% 할인을 안 받고 있다면 1년에 약 ${fmt(expected * 12)}을 더 아낄 수 있어요`
   );
 }
 
@@ -76,8 +76,8 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
       findings.push({
         rule: "R1",
         kind: "saving",
-        title: "선택약정 할인 안 받는 중",
-        reason: `월정액 ${fmt(feeAfterR4)}의 25%를 할인받을 수 있어요 (월정액 × 25% × 12개월)`,
+        title: "요금 25% 할인(선택약정) 안 받는 중",
+        reason: `기본 요금 ${fmt(feeAfterR4)}의 25%를 할인받을 수 있어요 (기본 요금 × 25% × 12개월)`,
         yearlySaving: won(feeAfterR4 * SELECTIVE_DISCOUNT_RATE * 12),
         source,
       });
@@ -85,7 +85,7 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
       findings.push({
         rule: "R1",
         kind: "check",
-        title: "선택약정 할인 여부 확인 필요",
+        title: "요금 25% 할인(선택약정) 받는지 확인",
         reason: selectiveCheckReason(input.planMonthlyFee, input.planDiscount),
         yearlySaving: 0,
         source,
@@ -141,7 +141,7 @@ export function diagnose(input: BillInput, catalog: CatalogPlan[] = []): Diagnos
     findings.push({
       rule: "R5",
       kind: "saving",
-      title: "연체 가산금",
+      title: "연체료",
       reason: `이번 달 연체로 ${fmt(input.lateFees)}이 더 붙었어요. 자동이체 계좌 잔액과 납부일을 확인해 보세요`,
       yearlySaving: won(input.lateFees),
       source,

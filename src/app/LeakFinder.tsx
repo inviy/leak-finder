@@ -46,10 +46,10 @@ const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 /** 선택약정 질문 화면의 한두 줄 설명. 결과 화면의 긴 설명(selectiveCheckReason)을 줄인 것 */
 function selectiveHint(fee: number, discount?: number): string {
   const expected = Math.round(fee * SELECTIVE_DISCOUNT_RATE);
-  if (!discount) return "고지서 할인상세에 '선택약정'이 있으면 받고 있는 거예요.";
+  if (!discount) return "고지서 할인 내역에 '선택약정'이 있으면 받고 있는 거예요.";
   if (Math.abs(discount - expected) <= Math.max(10, expected * 0.02))
-    return `할인 ${won(discount)}이 월정액의 25%와 같아서, 받고 있을 가능성이 높아요.`;
-  return `할인 ${won(discount)}은 선택약정 25%(${won(expected)})와 금액이 달라요.`;
+    return `할인 ${won(discount)}이 기본 요금의 25%와 같아서, 받고 있을 가능성이 높아요.`;
+  return `지금 할인 ${won(discount)}은 25%${discount < expected ? "보다 적어요" : "와 달라요"}.`;
 }
 
 export default function LeakFinder() {
@@ -151,6 +151,14 @@ export default function LeakFinder() {
       carrier === "MVNO"
         ? undefined
         : statements.find((d) => d.kind === "mobile" && d.selective === "unknown" && !doneIds.has(d.id) && (parseWon(d.planMonthlyFee) ?? 0) > 0);
+    // 진행 표시: 읽은 금액(1) + 안 쓰는 서비스(있으면) + 선택약정 질문(필요한 휴대폰마다)
+    const selectiveIds =
+      carrier === "MVNO"
+        ? []
+        : statements
+            .filter((d) => d.kind === "mobile" && (parseWon(d.planMonthlyFee) ?? 0) > 0 && (d.selective === "unknown" || asked.has(d.id)))
+            .map((d) => d.id);
+    const totalSteps = 1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length;
     const afterAddons = (doneIds = asked) => {
       const n = nextSelective(doneIds);
       if (n) setView({ kind: "selective", id: n.id });
@@ -195,7 +203,7 @@ export default function LeakFinder() {
       const hidden = statements.reduce((s, d) => s + d.addons.length - paidAddons(d).length, 0);
       return (
         <main className="screen">
-          <button className="link-btn" onClick={() => setView({ kind: "summary" })}>&lt; 읽은 금액</button>
+          <TopBar backLabel="이전" onBack={() => setView({ kind: "summary" })} at={2} total={totalSteps} />
           <div>
             <h1 className="title">안 쓰는 서비스를<br />골라 주세요</h1>
             <p className="sub">돈이 나가는 부가서비스만 모았어요.</p>
@@ -245,10 +253,15 @@ export default function LeakFinder() {
       };
       return (
         <main className="screen">
-          <button className="link-btn" onClick={() => setView(hasPaidAddons ? { kind: "addons" } : { kind: "summary" })}>&lt; 이전</button>
+          <TopBar
+            backLabel="이전"
+            onBack={() => setView(hasPaidAddons ? { kind: "addons" } : { kind: "summary" })}
+            at={1 + (hasPaidAddons ? 1 : 0) + selectiveIds.indexOf(d.id) + 1}
+            total={totalSteps}
+          />
           <div>
-            <h1 className="title">선택약정 할인을<br />받고 있나요?</h1>
-            <p className="sub">{selectiveHint(parseWon(d.planMonthlyFee) ?? 0, parseWon(d.planDiscount))}</p>
+            <h1 className="title">요금 25% 할인을<br />받고 있나요?</h1>
+            <p className="sub">통신사에서는 &apos;선택약정&apos;이라고 불러요.<br />{selectiveHint(parseWon(d.planMonthlyFee) ?? 0, parseWon(d.planDiscount))}</p>
           </div>
           <div className="choice-list">
             <button className="choice" onClick={() => answer("yes")}>받고 있어요</button>
@@ -267,13 +280,13 @@ export default function LeakFinder() {
     const describe = (d: StatementDraft) => {
       const parts: string[] = [];
       if (d.addons.length) parts.push(`부가서비스 ${d.addons.length}개`);
-      if (parseWon(d.lateFees)) parts.push(`가산금 ${won(parseWon(d.lateFees) ?? 0)}`);
+      if (parseWon(d.lateFees)) parts.push(`연체료 ${won(parseWon(d.lateFees) ?? 0)}`);
       if (parseWonList(d.pastTotals).length) parts.push(`지난 달 ${parseWonList(d.pastTotals).length}개월`);
       return parts.join(", ");
     };
     return (
       <main className="screen">
-        <button className="link-btn" onClick={() => setStep("upload")}>&lt; 처음으로</button>
+        <TopBar backLabel="처음으로" onBack={() => setStep("upload")} at={1} total={totalSteps} />
         <div>
           <h1 className="title">이번 달 {total > 0 ? won(total) : "통신비"},<br />이렇게 읽었어요</h1>
           <p className="sub">고지서와 다르면 눌러서 고쳐 주세요.</p>
@@ -296,7 +309,7 @@ export default function LeakFinder() {
           })}
         </ul>
         <details className="more">
-          <summary>명세서 더 넣기</summary>
+          <summary>고지서 더 넣기</summary>
           <div className="chips">
             {(Object.keys(KIND_LABEL) as StatementKind[]).map((k) => (
               <button
@@ -350,6 +363,26 @@ export default function LeakFinder() {
   );
 }
 
+/** 뒤로 가기 + 몇 번째 질문인지. 질문이 하나뿐이면 진행 표시는 숨김 */
+function TopBar(props: { backLabel: string; onBack: () => void; at: number; total: number }) {
+  const { backLabel, onBack, at, total } = props;
+  return (
+    <div className="top-row">
+      <button className="link-btn" onClick={onBack}>&lt; {backLabel}</button>
+      {total > 1 && (
+        <div className="top-row" aria-label={`${total}단계 중 ${at}단계`}>
+          <span className="step-count" aria-hidden>{at}/{total}</span>
+          <div className="progress" aria-hidden>
+            {Array.from({ length: total }, (_, i) => (
+              <span key={i} className={i < at ? "on" : undefined} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UploadScreen(props: {
   carrier: Carrier;
   onCarrier: (c: Carrier) => void;
@@ -382,8 +415,8 @@ function UploadScreen(props: {
         <div className="guide">
           통신사 앱이나 홈페이지의 <b>요금 조회</b>에서 이 화면들을 캡처해 주세요.
           <ol>
-            <li>상세 요금 명세서 (모바일, 인터넷·TV 각각)</li>
-            <li>할인상세 내역</li>
+            <li>요금 상세 내역 (휴대폰, 인터넷·TV 각각)</li>
+            <li>할인 내역</li>
             <li>최근 12개월 요금 조회 (월별 청구 합계, 있으면)</li>
           </ol>
         </div>
@@ -475,15 +508,15 @@ function StatementForm(props: {
       {d.kind === "mobile" && (
         <>
           <label className="field">
-            <span>요금제 월정액 (할인 전)</span>
-            <WonInput label="요금제 월정액" value={d.planMonthlyFee} onChange={(v) => onChange({ planMonthlyFee: v })} />
+            <span>요금제 기본 요금 (할인 전)</span>
+            <WonInput label="기본 요금" value={d.planMonthlyFee} onChange={(v) => onChange({ planMonthlyFee: v })} />
           </label>
           <label className="field">
-            <span>월정액 할인 (고지서의 할인금액)</span>
-            <WonInput label="월정액 할인" value={d.planDiscount} onChange={(v) => onChange({ planDiscount: v })} />
+            <span>기본 요금에서 할인된 금액</span>
+            <WonInput label="기본 요금 할인" value={d.planDiscount} onChange={(v) => onChange({ planDiscount: v })} />
           </label>
           <div className="field">
-            <span>선택약정 할인 (월정액 25%)</span>
+            <span>요금 25% 할인 (선택약정)</span>
             <div className="seg">
               {(
                 [
@@ -550,8 +583,8 @@ function StatementForm(props: {
       )}
 
       <label className="field">
-        <span>가산금 (가산금 + 미납가산금)</span>
-        <WonInput label="가산금" value={d.lateFees} onChange={(v) => onChange({ lateFees: v })} />
+        <span>연체료 (고지서의 가산금, 미납가산금)</span>
+        <WonInput label="연체료" value={d.lateFees} onChange={(v) => onChange({ lateFees: v })} />
       </label>
 
       <label className="field">
@@ -570,7 +603,7 @@ function StatementForm(props: {
       </label>
 
       {onRemove && (
-        <button className="link-btn" onClick={onRemove}>이 명세서 빼기</button>
+        <button className="link-btn" onClick={onRemove}>이 고지서 빼기</button>
       )}
     </div>
   );

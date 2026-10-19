@@ -8,7 +8,7 @@ import type { BillInput } from "../types";
 
 /** 모바일 통신요금 명세서 */
 export const ktMobile: BillInput = {
-  label: "모바일",
+  label: "휴대폰",
   carrier: "KT",
   planName: "(고지서에 요금제명 없음)",
   planMonthlyFee: 62728,

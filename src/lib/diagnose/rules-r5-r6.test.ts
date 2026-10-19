@@ -83,9 +83,9 @@ describe("실제 KT 고지서 (2026년 10월, 금액만)", () => {
     const r = diagnoseAll([ktMobile, ktHomeSeptember]);
     expect(r.yearlyTotal).toBe(78660 + 1520);
     expect(r.findings.map((f) => `${f.source}:${f.rule}`)).toEqual([
-      "모바일:R2",
-      "모바일:R5",
-      "모바일:R1",
+      "휴대폰:R2",
+      "휴대폰:R5",
+      "휴대폰:R1",
       "인터넷·TV:R6",
     ]);
   });
@@ -102,7 +102,7 @@ describe("R1 확인 문구 (월정액 할인금액으로 힌트)", () => {
     expect(selectiveCheckReason(62728, 15682)).toContain("가능성이 높");
   });
   it("할인금액이 없으면 할인상세 확인 안내", () => {
-    expect(selectiveCheckReason(62728)).toContain("할인상세");
+    expect(selectiveCheckReason(62728)).toContain("할인 내역");
   });
   it("확인 항목은 절감액에 더하지 않음", () => {
     const d = diagnose({ carrier: "KT", planName: "", planMonthlyFee: 62728, planDiscount: 9220, hasSelectiveDiscount: null, addons: [], promotions: [] });

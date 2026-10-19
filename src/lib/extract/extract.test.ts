@@ -124,7 +124,7 @@ describe("reconcile (검산과 화면 입력값)", () => {
   it("실제 KT 고지서: 모바일은 요금계가 안 맞아 경고, 인터넷·TV 는 부가세 반영해 통과", () => {
     const r = reconcile(validateExtracted(ktModelOutput));
     expect(r.warnings).toHaveLength(1);
-    expect(r.warnings[0].label).toBe("모바일");
+    expect(r.warnings[0].label).toBe("휴대폰");
     expect(r.warnings[0].message).toContain("76,164원");
     expect(r.warnings[0].message).toContain("244,190원");
     // 요금계가 더 크면 다른 회선 가능성을 알려 줌
@@ -194,12 +194,12 @@ describe("reconcile (검산과 화면 입력값)", () => {
   it("같은 종류 명세서가 둘이면 이름을 구분", () => {
     const one = { kind: "mobile", items: [{ name: "월정액", section: "월정액", amount: 1000 }], total: 1000 };
     const r = reconcile(validateExtracted({ statements: [one, one] }));
-    expect(r.drafts.map((d) => d.label)).toEqual(["모바일", "모바일 2"]);
+    expect(r.drafts.map((d) => d.label)).toEqual(["휴대폰", "휴대폰 2"]);
   });
 
   it("요금계를 못 읽으면 경고", () => {
     const r = reconcile(validateExtracted({ statements: [{ kind: "home", items: [{ name: "x", amount: 1 }], total: null }] }));
-    expect(r.warnings[0].message).toContain("요금계를 읽지 못했어요");
+    expect(r.warnings[0].message).toContain("합계를 읽지 못했어요");
   });
 });
 

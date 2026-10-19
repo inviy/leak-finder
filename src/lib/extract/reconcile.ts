@@ -94,12 +94,12 @@ export function reconcile(x: Extracted): Reconciled {
             : "잘못 읽은 금액이 있는지 고지서와 비교해 주세요.";
         warnings.push({
           label: d.label,
-          short: s.total > net ? "다른 회선이 같이 청구된 것 같아요" : "항목 합이 요금계와 달라요",
-          message: `읽은 항목을 더하면 ${fmt(net)}인데 요금계는 ${fmt(s.total)}이에요. ${why}`,
+          short: s.total > net ? "다른 회선이 같이 청구된 것 같아요" : "항목 합이 고지서 합계와 달라요",
+          message: `읽은 항목을 더하면 ${fmt(net)}인데 고지서 합계는 ${fmt(s.total)}이에요. ${why}`,
         });
       }
     } else if (s.total === null) {
-      warnings.push({ label: d.label, short: "요금계를 못 읽었어요", message: "요금계를 읽지 못했어요. 이번 달 청구 합계를 직접 넣어 주세요." });
+      warnings.push({ label: d.label, short: "합계를 못 읽었어요", message: "고지서 합계를 읽지 못했어요. 이번 달 청구 합계를 직접 넣어 주세요." });
     }
   }
 
