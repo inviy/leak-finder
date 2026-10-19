@@ -152,6 +152,28 @@ describe("reconcile (검산과 화면 입력값)", () => {
     expect(r.yearlyTotal).toBe(78660 + 1520);
   });
 
+  it("지난 달 합계는 쉼표 넣어 보여 주고, 진단에는 숫자로 그대로 들어감 (R6)", () => {
+    const home = {
+      kind: "home",
+      items: [{ name: "서비스이용료(홈)", section: "기본료", amount: 104640 }],
+      total: 104640,
+      pastTotals: [44220, 44220],
+    };
+    const [d] = reconcile(validateExtracted({ statements: [home] })).drafts;
+    expect(d.pastTotals).toBe("44,220, 44,220");
+    const bill = toBillInput(d, "KT");
+    expect(bill.pastTotals).toEqual([44220, 44220]);
+    expect(diagnoseAll([bill]).findings.map((f) => f.rule)).toContain("R6");
+  });
+
+  it("지난 달 요금 화면만 있으면 항목 없이 요금계와 지난 달만 가진 명세서로 받음 (경고 없음)", () => {
+    const onlyHistory = { kind: "home", items: [], total: 44220, pastTotals: [44220, 104640] };
+    const r = reconcile(validateExtracted({ statements: [onlyHistory] }));
+    expect(r.drafts).toHaveLength(1);
+    expect(r.drafts[0].totalAmount).toBe("44220");
+    expect(r.warnings).toHaveLength(0);
+  });
+
   it("같은 종류 명세서가 둘이면 이름을 구분", () => {
     const one = { kind: "mobile", items: [{ name: "월정액", section: "월정액", amount: 1000 }], total: 1000 };
     const r = reconcile(validateExtracted({ statements: [one, one] }));

@@ -54,6 +54,12 @@ export function newStatement(kind: StatementKind): StatementDraft {
 }
 
 /** "62,728" / "62728원" / "" → 숫자 (빈 값은 undefined) */
+/** 입력칸 표시용: "62728" → "62,728". 숫자 아닌 글자는 버림 */
+export function formatWon(s: string): string {
+  const digits = s.replace(/[^\d]/g, "").replace(/^0+(?=\d)/, "");
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 export function parseWon(s: string): number | undefined {
   const digits = s.replace(/[^\d]/g, "");
   if (digits === "") return undefined;

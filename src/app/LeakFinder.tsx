@@ -5,11 +5,13 @@ import { diagnoseAll, type Carrier, type Diagnosis, type Finding } from "@/lib/d
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
+import { MAX_IMAGES } from "@/lib/extract/limits";
 import {
   KIND_LABEL,
   newAddon,
   newId,
   newStatement,
+  formatWon,
   parseWon,
   toBillInput,
   type AddonDraft,
@@ -263,14 +265,14 @@ function UploadScreen(props: {
           <ol>
             <li>상세 요금 명세서 (모바일, 인터넷·TV 각각)</li>
             <li>할인상세 내역</li>
-            <li>최근 몇 달 요금 (있으면)</li>
+            <li>최근 12개월 요금 조회 (월별 청구 합계, 있으면)</li>
           </ol>
         </div>
       </div>
 
       <label className="drop">
         <strong>캡처 올리기 (여러 장 가능)</strong>
-        <span>PNG, JPG 캡처를 4장까지 올릴 수 있어요.</span>
+        <span>PNG, JPG 캡처를 {MAX_IMAGES}장까지 올릴 수 있어요.</span>
         <input
           type="file"
           accept="image/*"
@@ -307,8 +309,8 @@ function UploadScreen(props: {
       <div className="spacer" />
       {shots.length > 0 ? (
         <>
-          <button className="btn" onClick={onAutoRead} disabled={reading || shots.length > 4}>
-            {reading ? "읽는 중..." : shots.length > 4 ? "4장까지만 올려 주세요" : "자동으로 읽기"}
+          <button className="btn" onClick={onAutoRead} disabled={reading || shots.length > MAX_IMAGES}>
+            {reading ? "읽는 중..." : shots.length > MAX_IMAGES ? `${MAX_IMAGES}장까지만 올려 주세요` : "자동으로 읽기"}
           </button>
           <button className="btn secondary" onClick={onNext} disabled={reading}>직접 입력하기</button>
         </>
@@ -327,8 +329,9 @@ function WonInput(props: { value: string; onChange: (v: string) => void; label: 
         inputMode="numeric"
         aria-label={props.label}
         placeholder={props.placeholder ?? "0"}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
+        value={formatWon(props.value)}
+        // 저장은 숫자만, 보이는 값은 천 단위 쉼표
+        onChange={(e) => props.onChange(e.target.value.replace(/[^\d]/g, ""))}
       />
     </div>
   );
@@ -380,15 +383,15 @@ function StatementForm(props: {
           )}
           {d.addons.map((a) => (
             <div key={a.id} className="card" style={{ padding: 12, gap: 8 }}>
-              <div className="addon">
-                <input
+              <div className="addon-name">
+                <textarea
                   className="input"
+                  rows={1}
                   aria-label="부가서비스 이름"
                   placeholder="이름"
                   value={a.name}
-                  onChange={(e) => setAddon(a.id, { name: e.target.value })}
+                  onChange={(e) => setAddon(a.id, { name: e.target.value.replace(/\n/g, " ") })}
                 />
-                <WonInput label={`${a.name || "부가서비스"} 이용금액`} value={a.fee} onChange={(v) => setAddon(a.id, { fee: v })} />
                 <button
                   className="icon-btn"
                   aria-label={`${a.name || "부가서비스"} 빼기`}
@@ -397,19 +400,19 @@ function StatementForm(props: {
                   ✕
                 </button>
               </div>
-              <div className="addon">
-                <label className="addon-used">
-                  <input type="checkbox" checked={a.used} onChange={(e) => setAddon(a.id, { used: e.target.checked })} />
-                  쓰고 있음
-                </label>
+              <div className="addon-amounts">
+                <WonInput label={`${a.name || "부가서비스"} 이용금액`} placeholder="이용 0" value={a.fee} onChange={(v) => setAddon(a.id, { fee: v })} />
                 <WonInput
                   label={`${a.name || "부가서비스"} 할인금액`}
                   placeholder="할인 0"
                   value={a.discount}
                   onChange={(v) => setAddon(a.id, { discount: v })}
                 />
-                <span />
               </div>
+              <label className="addon-used">
+                <input type="checkbox" checked={a.used} onChange={(e) => setAddon(a.id, { used: e.target.checked })} />
+                쓰고 있음
+              </label>
             </div>
           ))}
           <button className="btn secondary" onClick={() => onChange({ addons: [...d.addons, newAddon()] })}>

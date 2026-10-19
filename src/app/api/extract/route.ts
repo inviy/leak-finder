@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { extractFromImages, NotConfiguredError, type ImageInput } from "@/lib/extract/claude";
 import { ExtractError } from "@/lib/extract/schema";
 import { allowRequest } from "@/lib/extract/rate-limit";
+import { MAX_IMAGES } from "@/lib/extract/limits";
 
 /** 비용 남용을 막는 한도 (공개 엔드포인트가 유료 모델을 부르므로) */
-const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 10 * 1024 * 1024;
 const TYPES = new Set<ImageInput["mediaType"]>(["image/png", "image/jpeg", "image/webp", "image/gif"]);
