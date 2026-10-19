@@ -6,6 +6,7 @@ import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import { MAX_IMAGES } from "@/lib/extract/limits";
+import { findMissing } from "@/lib/extract/missing";
 import { contractReminder, contractReminderPath, googleCalendarUrl, planContractReminder } from "@/lib/reminder";
 import {
   KIND_LABEL,
@@ -33,11 +34,15 @@ type ConfirmView =
   | { kind: "contract"; id: string }
   | { kind: "edit"; id: string };
 
-const CARRIERS: { id: Carrier; name: string }[] = [
-  { id: "SKT", name: "SKT" },
-  { id: "KT", name: "KT" },
-  { id: "LGU", name: "LG U+" },
-  { id: "MVNO", name: "알뜰폰" },
+/**
+ * app: 통신사 공식 앱 이름 (2026-10 앱스토어 기준. LG U+ 는 "당신의 U+"에서 U+one 으로 바뀜).
+ * 메뉴 경로는 통신사가 자주 바꾸고 공식 도움말에도 없어 적지 않음. 대신 읽은 뒤 빠진 것을 알려 줌
+ */
+const CARRIERS: { id: Carrier; name: string; app: string }[] = [
+  { id: "SKT", name: "SKT", app: "T world" },
+  { id: "KT", name: "KT", app: "마이 케이티" },
+  { id: "LGU", name: "LG U+", app: "U+one" },
+  { id: "MVNO", name: "알뜰폰", app: "가입한 알뜰폰 회사" },
 ];
 
 interface Shot {
@@ -346,6 +351,8 @@ export default function LeakFinder() {
     }
 
     // summary: 읽은 금액이 맞는지만 묻는 첫 화면
+    const missing = findMissing(statements);
+    const needMore = missing.some((m) => m.required);
     const total = statements.reduce((s, d) => s + (parseWon(d.totalAmount) ?? 0), 0);
     const describe = (d: StatementDraft) => {
       const parts: string[] = [];
@@ -378,6 +385,19 @@ export default function LeakFinder() {
             );
           })}
         </ul>
+        {missing.length > 0 && (
+          <div className={needMore ? "need need-required" : "need"}>
+            <p className="need-title">{needMore ? "캡처가 더 필요해요" : "더 올리면 더 정확해요"}</p>
+            <ul>
+              {missing.map((m, i) => (
+                <li key={i}>{m.text}</li>
+              ))}
+            </ul>
+            {!needMore && (
+              <button className="btn secondary" onClick={() => setStep("upload")}>캡처 더 올리기</button>
+            )}
+          </div>
+        )}
         <details className="more">
           <summary>고지서 더 넣기</summary>
           <div className="chips">
@@ -398,7 +418,17 @@ export default function LeakFinder() {
         </details>
         <div className="spacer" />
         <div className="cta-bar">
-          <button className="btn" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>맞아요</button>
+          {needMore ? (
+            // 꼭 필요한 화면이 빠졌으면 더 올리기가 주 버튼, 그래도 그냥 진행할 수 있게
+            <>
+              <button className="btn" onClick={() => setStep("upload")}>캡처 더 올리기</button>
+              <button className="link-btn center" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>
+                이대로 진행할게요
+              </button>
+            </>
+          ) : (
+            <button className="btn" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>맞아요</button>
+          )}
         </div>
       </main>
     );
@@ -523,12 +553,9 @@ function UploadScreen(props: {
           </div>
         )}
         <div className="guide">
-          통신사 앱이나 홈페이지의 <b>요금 조회</b>에서 이 화면들을 캡처해 주세요.
-          <ol>
-            <li>요금 상세 내역 (휴대폰, 인터넷·TV 각각)</li>
-            <li>할인 내역</li>
-            <li>최근 12개월 요금 조회 (월별 청구 합계, 있으면)</li>
-          </ol>
+          <b>{CARRIERS.find((c) => c.id === carrier)?.app}</b> 앱에서 이번 달 요금이 항목별로 나오는 화면을 캡처해 주세요.
+          <br />
+          빠진 게 있으면 읽은 뒤에 무엇을 더 올리면 되는지 알려 드려요.
         </div>
       </div>
 
