@@ -27,6 +27,8 @@ export interface StatementDraft {
   pastTotals: string;
   /** 인터넷·TV 약정 상태, 아직 안 물었으면 "" */
   contract: ContractState | "";
+  /** 인터넷을 설치한 해 (사용자가 고름, 모르면 undefined) */
+  installYear?: number;
 }
 
 export const KIND_LABEL: Record<StatementKind, string> = {
@@ -105,5 +107,20 @@ export function toBillInput(d: StatementDraft, carrier: Carrier, network?: Netwo
     totalAmount: parseWon(d.totalAmount),
     pastTotals: parseWonList(d.pastTotals),
     contract: d.kind === "home" && d.contract ? d.contract : undefined,
+    contractStartYear: d.kind === "home" ? d.installYear : undefined,
   };
+}
+
+/** 인터넷 약정은 보통 3년 */
+export const USUAL_CONTRACT_YEARS = 3;
+
+/**
+ * 설치한 해로 약정 상태 추정. 달은 모르므로 끝나는 해가 올해면 "곧 끝남"(이미 끝났을 수도 있음)
+ * 예: 올해 2026 → 2022 설치 끝남, 2023 설치 곧 끝남, 2024~2026 설치 많이 남음
+ */
+export function estimateContract(installYear: number, thisYear: number): Exclude<ContractState, "unknown"> {
+  const end = installYear + USUAL_CONTRACT_YEARS;
+  if (end < thisYear) return "ended";
+  if (end === thisYear) return "soon";
+  return "long";
 }

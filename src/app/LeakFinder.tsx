@@ -6,11 +6,14 @@ import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import { MAX_IMAGES } from "@/lib/extract/limits";
+import { buildIcs, googleCalendarUrl, planContractReminder, type Reminder } from "@/lib/reminder";
 import {
   KIND_LABEL,
   newAddon,
   newId,
   newStatement,
+  estimateContract,
+  USUAL_CONTRACT_YEARS,
   formatWon,
   parseWon,
   parseWonList,
@@ -299,10 +302,21 @@ export default function LeakFinder() {
     if (view.kind === "contract") {
       const d = statements.find((x) => x.id === view.id);
       if (!d) return null;
-      const answer = (v: ContractState) => {
-        updateStatement(d.id, { contract: v });
+      const thisYear = new Date().getFullYear();
+      const pickYear = (y: number) => {
+        updateStatement(d.id, { installYear: y, contract: estimateContract(y, thisYear) });
         answered(d.id);
       };
+      const dontKnow = () => {
+        updateStatement(d.id, { installYear: undefined, contract: "unknown" });
+        answered(d.id);
+      };
+      // 고르기 전에 무슨 뜻인지 바로 보이게 (보통 3년 약정 기준)
+      const meaning = (y: number) => {
+        const e = estimateContract(y, thisYear);
+        return e === "ended" ? "약정이 끝났을 가능성이 높아요" : e === "soon" ? "올해 약정이 끝나요" : `${y + USUAL_CONTRACT_YEARS}년에 끝나요`;
+      };
+      const years = [thisYear - 4, thisYear - 3, thisYear - 2, thisYear - 1, thisYear];
       const prev = selectiveIds.at(-1);
       return (
         <main className="screen">
@@ -315,18 +329,17 @@ export default function LeakFinder() {
             total={totalSteps}
           />
           <div>
-            <h1 className="title">인터넷 약정,<br />언제 끝나나요?</h1>
-            <p className="sub">보통 3년 약정이라, 가입한 지 3년이 지났다면 끝났을 가능성이 높아요.</p>
+            <h1 className="title">인터넷,<br />언제 설치했어요?</h1>
+            <p className="sub">대략 연도만 골라 주세요. 약정이 끝났는지 알려 드려요.</p>
           </div>
-          <div className="choice-list">
-            <button className="choice" onClick={() => answer("ended")}>
-              이미 끝났어요<span>재약정이나 이동 혜택을 받을 수 있어요</span>
-            </button>
-            <button className="choice" onClick={() => answer("soon")}>3개월 안에 끝나요</button>
-            <button className="choice" onClick={() => answer("long")}>아직 많이 남았어요</button>
-            <button className="choice" onClick={() => answer("unknown")}>
-              잘 모르겠어요<span>결과에서 확인하는 방법을 알려 드려요</span>
-            </button>
+          <div className="choice-list compact">
+            {years.map((y, i) => (
+              <button key={y} className="choice" onClick={() => pickYear(y)}>
+                {i === 0 ? `${y}년이나 그 전` : `${y}년`}
+                <span>{meaning(y)}</span>
+              </button>
+            ))}
+            <button className="choice" onClick={dontKnow}>잘 모르겠어요</button>
           </div>
         </main>
       );
@@ -841,6 +854,75 @@ function ResultScreen(props: {
   );
 }
 
+/** 약정 끝나기 전 알림: 가입 없이 휴대폰 달력에 일정으로 넣음 */
+function ContractReminder({ endYear }: { endYear: number }) {
+  const [month, setMonth] = useState(0);
+  const [added, setAdded] = useState(false);
+  const now = new Date();
+  const plan = planContractReminder(endYear, month || undefined, {
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+    day: now.getDate(),
+  });
+
+  const monthPicker = (
+    <label className="remind-row">
+      <span>설치한 달</span>
+      <select className="select" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+        <option value={0}>모름</option>
+        {Array.from({ length: 12 }, (_, i) => (
+          <option key={i + 1} value={i + 1}>{i + 1}월</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  if (plan.kind === "ended") {
+    return (
+      <div className="remind">
+        {monthPicker}
+        <p className="remind-ended">
+          {plan.endYear}년 {plan.month}월에 이미 끝났어요. 알림 대신 지금 바로 혜택을 비교해 보세요.
+        </p>
+      </div>
+    );
+  }
+
+  const { date } = plan;
+  const reminder: Reminder = {
+    id: `r7-${date.year}-${date.month}`,
+    title: month ? "다음 달 인터넷 약정 끝나요" : `${endYear}년, 인터넷 약정 끝나는 해예요`,
+    details:
+      "새는돈 알림: 지금 통신사에 재약정 혜택을 물어보고, 다른 통신사 가입 혜택과 비교해 보세요. " +
+      (typeof window === "undefined" ? "" : window.location.origin),
+    date,
+  };
+  const addToPhone = () => {
+    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+    const url = URL.createObjectURL(new Blob([buildIcs(reminder, stamp)], { type: "text/calendar;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "internet-contract-reminder.ics";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setAdded(true);
+  };
+  return (
+    <div className="remind">
+      {monthPicker}
+      <div className="btn-row">
+        <button className="btn secondary" onClick={addToPhone}>{added ? "달력 파일 받음" : "휴대폰 달력에 넣기"}</button>
+        <a className="btn secondary link-out" href={googleCalendarUrl(reminder)} target="_blank" rel="noopener noreferrer">
+          구글 캘린더
+        </a>
+      </div>
+      <p className="note">{date.year}년 {date.month}월 {date.day}일 아침에 알려 드려요. 가입은 필요 없어요.</p>
+    </div>
+  );
+}
+
 function ActionScreen(props: {
   result: Diagnosis;
   activeKey: string;
@@ -877,6 +959,10 @@ function ActionScreen(props: {
       </ol>
 
       {g.caution && <p className="caution">{g.caution}</p>}
+
+      {active.rule === "R7" && active.endYear && (active.variant === "soon" || active.variant === "long") && (
+        <ContractReminder endYear={active.endYear} />
+      )}
 
       <div className="spacer" />
       <div className="cta-bar">
