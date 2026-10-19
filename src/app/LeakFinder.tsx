@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Diagnosis, type Finding } from "@/lib/diagnose";
+import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Network, type Diagnosis, type Finding } from "@/lib/diagnose";
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
@@ -60,6 +60,8 @@ function selectiveHint(fee: number, discount?: number): string {
 export default function LeakFinder() {
   const [step, setStep] = useState<Step>("upload");
   const [carrier, setCarrier] = useState<Carrier>("KT");
+  /** 알뜰폰일 때 쓰는 망. "" 은 아직 안 고름 */
+  const [network, setNetwork] = useState<Network | "unknown" | "">("");
   const [shots, setShots] = useState<Shot[]>([]);
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
@@ -110,8 +112,9 @@ export default function LeakFinder() {
   useEffect(() => () => shotsRef.current.forEach((s) => URL.revokeObjectURL(s.url)), []);
 
   const result: Diagnosis = useMemo(
-    () => diagnoseAll(statements.map((s) => toBillInput(s, carrier))),
-    [statements, carrier],
+    () =>
+      diagnoseAll(statements.map((s) => toBillInput(s, carrier, network === "unknown" || network === "" ? undefined : network))),
+    [statements, carrier, network],
   );
 
   const updateStatement = (id: string, patch: Partial<StatementDraft>) =>
@@ -124,6 +127,8 @@ export default function LeakFinder() {
       <UploadScreen
         carrier={carrier}
         onCarrier={setCarrier}
+        network={network}
+        onNetwork={setNetwork}
         shots={shots}
         onAddShots={(files) =>
           setShots((s) => [
@@ -397,6 +402,7 @@ export default function LeakFinder() {
     };
     return (
       <ActionScreen
+        carrier={carrier}
         result={result}
         activeKey={guideKey}
         done={done}
@@ -455,6 +461,8 @@ function TopBar(props: { backLabel: string; onBack: () => void; at: number; tota
 function UploadScreen(props: {
   carrier: Carrier;
   onCarrier: (c: Carrier) => void;
+  network: Network | "unknown" | "";
+  onNetwork: (n: Network | "unknown") => void;
   shots: Shot[];
   onAddShots: (files: File[]) => void;
   onRemoveShot: (id: string) => void;
@@ -462,7 +470,7 @@ function UploadScreen(props: {
   onAutoRead: () => void;
   read: ReadState;
 }) {
-  const { carrier, onCarrier, shots, onAddShots, onRemoveShot, onNext, onAutoRead, read } = props;
+  const { carrier, onCarrier, network, onNetwork, shots, onAddShots, onRemoveShot, onNext, onAutoRead, read } = props;
   const reading = read.status === "reading";
   return (
     <main className="screen">
@@ -481,6 +489,26 @@ function UploadScreen(props: {
             </button>
           ))}
         </div>
+        {carrier === "MVNO" && (
+          <div className="field sub-field">
+            <span className="label">어느 통신사 망을 쓰나요?</span>
+            <div className="chips">
+              {(
+                [
+                  ["SKT", "SKT망"],
+                  ["KT", "KT망"],
+                  ["LGU", "LG U+망"],
+                  ["unknown", "모르겠어요"],
+                ] as [Network | "unknown", string][]
+              ).map(([v, t]) => (
+                <button key={v} className="chip" aria-pressed={network === v} onClick={() => onNetwork(v)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <p className="note">가입한 알뜰폰 요금제 정보에 적혀 있어요.</p>
+          </div>
+        )}
         <div className="guide">
           통신사 앱이나 홈페이지의 <b>요금 조회</b>에서 이 화면들을 캡처해 주세요.
           <ol>
@@ -821,12 +849,13 @@ function ActionScreen(props: {
   onUndo: (key: string) => void;
   onLater: (key: string) => void;
   onBack: () => void;
+  carrier: Carrier;
 }) {
-  const { result, activeKey, done, onDone, onUndo, onLater, onBack } = props;
+  const { result, activeKey, done, onDone, onUndo, onLater, onBack, carrier } = props;
   const active = result.findings.find((f) => findingKey(f) === activeKey) ?? result.findings[0];
   if (!active) return null;
   const key = findingKey(active);
-  const g = guideFor(active.rule, active.kind, undefined, active.variant);
+  const g = guideFor(active.rule, active.kind, carrier, active.variant, active.statementType);
   const isDone = done.has(key);
   const at = result.findings.indexOf(active) + 1;
 

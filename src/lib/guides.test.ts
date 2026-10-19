@@ -49,3 +49,19 @@ describe("guideFor", () => {
     }
   });
 });
+
+describe("알뜰폰 안내", () => {
+  it("휴대폰 관련 안내는 114 대신 알뜰폰 회사 고객센터", () => {
+    for (const r of ["R2", "R5"] as const) {
+      const text = guideFor(r, "saving", "MVNO", undefined, "mobile").steps.join(" ");
+      expect(text).not.toContain("114");
+      expect(text).toContain("알뜰폰 회사");
+    }
+  });
+  it("인터넷·TV 는 알뜰폰이어도 통신사 안내 그대로", () => {
+    expect(guideFor("R7", "check", "MVNO", "unknown", "home").steps.join(" ")).toContain("114");
+  });
+  it("큰 통신사는 114 안내 그대로", () => {
+    expect(guideFor("R2", "saving", "KT", undefined, "mobile").steps.join(" ")).toContain("114");
+  });
+});

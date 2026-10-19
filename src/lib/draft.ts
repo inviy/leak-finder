@@ -1,4 +1,4 @@
-import type { BillInput, Carrier, ContractState } from "./diagnose";
+import type { BillInput, Carrier, ContractState, Network } from "./diagnose";
 
 /** 화면에서 편집하는 명세서 한 장 (입력 중이라 숫자는 문자열) */
 export type StatementKind = "mobile" | "device" | "home";
@@ -80,11 +80,13 @@ export function parseWonList(s: string): number[] {
   return (s.match(/\d{1,3}(?:,\d{3})+|\d+/g) ?? []).map((t) => Number(t.replace(/,/g, "")));
 }
 
-export function toBillInput(d: StatementDraft, carrier: Carrier): BillInput {
+export function toBillInput(d: StatementDraft, carrier: Carrier, network?: Network): BillInput {
   const selective = d.selective === "yes" ? true : d.selective === "no" ? false : null;
   return {
     label: d.label || KIND_LABEL[d.kind],
     carrier,
+    network: carrier === "MVNO" ? network : undefined,
+    statementType: d.kind,
     planName: "",
     // 요금제가 있는 건 모바일만. 단말대금, 인터넷·TV 는 R1 판단 안 함
     planMonthlyFee: d.kind === "mobile" ? parseWon(d.planMonthlyFee) ?? 0 : 0,

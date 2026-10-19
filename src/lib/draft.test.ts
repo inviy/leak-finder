@@ -86,3 +86,12 @@ describe("toBillInput", () => {
     expect(r.findings.map((f) => f.rule)).toEqual(["R2", "R5", "R1", "R6"]);
   });
 });
+
+describe("toBillInput 알뜰폰 망", () => {
+  it("알뜰폰일 때만 망을 넘김", () => {
+    const m = newStatement("mobile");
+    expect(toBillInput(m, "MVNO", "KT").network).toBe("KT");
+    expect(toBillInput(m, "KT", "KT").network).toBeUndefined();
+    expect(toBillInput(m, "MVNO").statementType).toBe("mobile");
+  });
+});

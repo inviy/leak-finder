@@ -1,4 +1,4 @@
-import type { Carrier, RuleId } from "./diagnose";
+import type { Carrier, RuleId, StatementType } from "./diagnose";
 
 /**
  * 진단 항목별 조치 가이드.
@@ -118,10 +118,32 @@ const R7_GUIDES: Record<string, Guide> = {
   },
 };
 
-/** 알뜰폰은 선택약정 대상이 아니라 다른 안내가 필요 없음. kind 가 check 인 R1 은 확인 가이드 */
-export function guideFor(rule: RuleId, kind: "saving" | "check", carrier?: Carrier, variant?: string): Guide {
-  void carrier;
-  if (rule === "R1" && kind === "check") return RULE_CHECK_SELECTIVE;
-  if (rule === "R7") return R7_GUIDES[variant ?? "unknown"] ?? R7_GUIDES.unknown;
-  return GUIDES[rule];
+/**
+ * 알뜰폰 가입자는 114 가 아니라 가입한 알뜰폰 회사 고객센터와 앱을 써야 함.
+ * 인터넷·TV 는 알뜰폰이 아니라 큰 통신사에서 쓰므로 그대로 둠
+ */
+function forMvno(g: Guide): Guide {
+  const fix = (t: string) =>
+    t
+      .replace("114(통신사 고객센터)에", "가입한 알뜰폰 회사 고객센터에")
+      .replace("통신사 앱이나 대리점에서", "알뜰폰 회사 앱이나 고객센터에서")
+      .replace(/통신사 앱/g, "알뜰폰 회사 앱");
+  return { ...g, steps: g.steps.map(fix), caution: g.caution && fix(g.caution) };
+}
+
+/** kind 가 check 인 R1 은 확인 가이드, R7 은 약정 상황별 가이드 */
+export function guideFor(
+  rule: RuleId,
+  kind: "saving" | "check",
+  carrier?: Carrier,
+  variant?: string,
+  statementType?: StatementType,
+): Guide {
+  const g =
+    rule === "R1" && kind === "check"
+      ? RULE_CHECK_SELECTIVE
+      : rule === "R7"
+        ? (R7_GUIDES[variant ?? "unknown"] ?? R7_GUIDES.unknown)
+        : GUIDES[rule];
+  return carrier === "MVNO" && statementType !== "home" ? forMvno(g) : g;
 }
