@@ -12,6 +12,13 @@ describe("resolveAuth", () => {
     ).toEqual({ kind: "api_key" });
   });
 
+  it("API 키 + 워크스페이스 ID 면 헤더로 보낼 ID 를 같이 돌려줌", () => {
+    expect(resolveAuth({ ANTHROPIC_API_KEY: "k", ANTHROPIC_WORKSPACE_ID: " wrkspc_1 " })).toEqual({
+      kind: "api_key",
+      workspaceId: "wrkspc_1",
+    });
+  });
+
   it("규칙 ID 와 조직 ID 가 있으면 페더레이션", () => {
     expect(
       resolveAuth({

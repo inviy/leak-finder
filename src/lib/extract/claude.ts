@@ -61,7 +61,12 @@ function getClient(): Anthropic {
   if (auth.kind === "none") throw new NotConfiguredError("Claude API 인증 정보 없음");
 
   if (auth.kind === "api_key") {
-    client = new Anthropic({ timeout: TIMEOUT_MS, maxRetries: 1 });
+    client = new Anthropic({
+      timeout: TIMEOUT_MS,
+      maxRetries: 1,
+      // 워크스페이스에 묶이지 않은 키는 어느 워크스페이스로 쓸지 헤더로 알려야 함 (없으면 400)
+      ...(auth.workspaceId ? { defaultHeaders: { "anthropic-workspace-id": auth.workspaceId } } : {}),
+    });
   } else {
     client = new Anthropic({
       timeout: TIMEOUT_MS,

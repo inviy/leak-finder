@@ -47,9 +47,10 @@
 | 환경 | 방식 | 환경 변수 |
 | --- | --- | --- |
 | 운영 (Vercel) | **ID 페더레이션**: Vercel이 요청마다 발급하는 OIDC 토큰을 Anthropic 토큰으로 교환, 정적 키 없음 | `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, `ANTHROPIC_SERVICE_ACCOUNT_ID`, `ANTHROPIC_WORKSPACE_ID` |
-| 로컬 개발 | API 키 | `ANTHROPIC_API_KEY` |
+| 로컬 개발, 현재 운영 | API 키 | `ANTHROPIC_API_KEY`, 키가 워크스페이스에 묶이지 않았으면 `ANTHROPIC_WORKSPACE_ID` |
 
-- 운영에 `ANTHROPIC_API_KEY`를 같이 넣으면 키가 먼저 쓰여 페더레이션이 무시됩니다. 운영에는 넣지 않습니다.
+- `ANTHROPIC_API_KEY`가 있으면 키가 먼저 쓰여 페더레이션은 무시됩니다.
+- 워크스페이스에 묶이지 않은 키는 `anthropic-workspace-id` 헤더가 없으면 400을 돌려줍니다. `ANTHROPIC_WORKSPACE_ID`를 넣으면 이 헤더를 붙입니다.
 - Anthropic 콘솔 발급자: `https://oidc.vercel.com/leedongwooks-projects` (Vercel 팀 발급자 방식)
 - 규칙 조건: 주체 `owner:leedongwooks-projects:project:leak-finder:environment:production`, 대상 `https://vercel.com/leedongwooks-projects`
 - 페더레이션 ID 는 비밀값이 아닙니다. 토큰 교환과 캐시, 만료 전 갱신은 SDK가 처리합니다 (`src/lib/extract/claude.ts`).
