@@ -163,3 +163,14 @@ button, input, select { font: inherit; color: inherit; }
 
 .section-title { font-size: 15px; font-weight: 700; margin-top: 4px; }
 .empty { text-align: center; color: var(--muted); font-size: 14px; padding: 24px 0; }
+
+.warn {
+  background: #fff6e5;
+  border: 1px solid #f0c36d;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #5c4100;
+  line-height: 1.5;
+}
+.warn ul { margin: 6px 0 0; padding-left: 18px; }
