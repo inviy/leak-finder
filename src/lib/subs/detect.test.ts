@@ -40,3 +40,18 @@ describe("구독 찾기", () => {
     expect(telecomOverlaps(found.map((f) => f.key), ["캐치콜서비스"])).toEqual([]);
   });
 });
+
+describe("실제 카드 이용내역 (2026-10, 구독 없는 화면)", () => {
+  // 사용자가 준 실제 캡처의 가맹점과 금액. 구독이 하나도 없어야 함
+  const real = [
+    { merchant: "건대365약국", amount: 5000, date: "2026-10-13" },
+    { merchant: "주식회사 성동에너지", amount: 50000, date: "2026-10-13" },
+    { merchant: "더에이스코리아(유)에이스5차점", amount: 7500, date: "2026-10-12" },
+    { merchant: "악어떼 노래연습장", amount: 6000, date: "2026-10-11" },
+    { merchant: "베트남쌍둥이커피", amount: 11800, date: "2026-10-11" },
+    { merchant: "빵드램", amount: 16300, date: "2026-10-11" },
+  ];
+  it("구독으로 잘못 잡는 것이 없음", () => {
+    expect(detectSubscriptions(real)).toEqual([]);
+  });
+});

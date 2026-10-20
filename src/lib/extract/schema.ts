@@ -78,6 +78,14 @@ function toWon(v: unknown): number | null {
 
 export class ExtractError extends Error {}
 
+/** "YYYY-MM-DD" 이면서 실제로 있는 날짜인지 (2026-13-40 같은 값은 버림) */
+function isRealDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
 /** 모델 응답 문자열에서 첫 JSON 객체를 꺼냄 (```json 블록이나 앞뒤 설명이 붙어도) */
 export function pickJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -131,11 +139,16 @@ export function validateExtracted(raw: unknown): Extracted {
   for (const it of Array.isArray(plist) ? plist.slice(0, LIMITS.payments) : []) {
     if (!it || typeof it !== "object") continue;
     const r = it as Record<string, unknown>;
-    const merchant = cleanText(r.merchant);
+    // 모델이 실수로 붙인 카드 번호 일부("본인 850*", "1234****")는 지움
+    const merchant = cleanText(
+      typeof r.merchant === "string"
+        ? r.merchant.replace(/(본인|가족)?\s*\d{2,4}\*+(\d|\*)*/g, " ").replace(/(본인|가족)\s*$/g, "")
+        : r.merchant,
+    );
     const amount = toWon(r.amount);
     if (!merchant || amount === null || amount === 0) continue;
     if (/\d{4}[-\s*]?\d{4}[-\s*]?\d{4}/.test(merchant)) continue;
-    const date = typeof r.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null;
+    const date = typeof r.date === "string" && isRealDate(r.date) ? r.date : null;
     payments.push({ merchant, amount: Math.abs(amount), date });
   }
 

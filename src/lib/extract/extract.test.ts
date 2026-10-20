@@ -120,6 +120,30 @@ describe("validateExtracted (모델 출력은 신뢰하지 않음)", () => {
   });
 });
 
+describe("카드 결제 내역 읽기 검증", () => {
+  it("카드 번호 일부는 지우고, 카드 번호 모양 줄과 0원은 버림", () => {
+    const v = validateExtracted({
+      statements: [],
+      payments: [
+        { merchant: "건대365약국 본인 850*", amount: 5000, date: "2026-10-13" },
+        { merchant: "NETFLIX.COM", amount: "17,000원", date: "2026-10-03" },
+        { merchant: "1234-5678-9012-3456", amount: 1000, date: null },
+        { merchant: "무료", amount: 0, date: null },
+        { merchant: "취소", amount: -3000, date: "2026-13-40" },
+      ],
+    });
+    expect(v.payments.map((p) => p.merchant)).toEqual(["건대365약국", "NETFLIX.COM", "취소"]);
+    expect(v.payments[1].amount).toBe(17000);
+    expect(v.payments[2]).toMatchObject({ amount: 3000, date: null });
+  });
+
+  it("카드 내역만 있어도 읽기 성공 (통신 고지서 없음)", () => {
+    const v = validateExtracted({ statements: [], payments: [{ merchant: "티빙", amount: 13900, date: null }] });
+    expect(v.statements).toEqual([]);
+    expect(v.payments).toHaveLength(1);
+  });
+});
+
 describe("reconcile (검산과 화면 입력값)", () => {
   it("실제 KT 고지서: 모바일은 요금계가 안 맞아 경고, 인터넷·TV 는 부가세 반영해 통과", () => {
     const r = reconcile(validateExtracted(ktModelOutput));

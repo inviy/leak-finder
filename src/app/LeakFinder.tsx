@@ -6,7 +6,7 @@ import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import { MAX_IMAGES } from "@/lib/extract/limits";
-import { findMissing } from "@/lib/extract/missing";
+import { findMissing, type CardRead } from "@/lib/extract/missing";
 import { detectSubscriptions, duplicateGroups, telecomOverlaps, type FoundSub } from "@/lib/subs/detect";
 import { diagnoseSubs } from "@/lib/subs/diagnose";
 import { contractReminder, contractReminderPath, googleCalendarUrl, planContractReminder } from "@/lib/reminder";
@@ -77,6 +77,7 @@ export default function LeakFinder() {
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
   /** 카드 결제 내역에서 찾은 정기결제 (used=false 면 사용자가 "안 쓴다"고 고름) */
   const [subs, setSubs] = useState<(FoundSub & { used: boolean })[]>([]);
+  const [cardRead, setCardRead] = useState<CardRead | undefined>(undefined);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
   const [view, setView] = useState<ConfirmView>({ kind: "summary" });
   /** 선택약정을 이미 물어본 명세서 ("잘 모르겠어요"도 답으로 봄) */
@@ -108,7 +109,14 @@ export default function LeakFinder() {
       const x = data as Extracted;
       const r = reconcile(x);
       setStatements(r.drafts);
-      setSubs(detectSubscriptions(x.payments ?? []).map((f) => ({ ...f, used: true })));
+      const pays = x.payments ?? [];
+      setSubs(detectSubscriptions(pays).map((f) => ({ ...f, used: true })));
+      const days = pays.map((p) => p.date).filter((d): d is string => !!d).sort();
+      setCardRead(
+        pays.length
+          ? { count: pays.length, spanDays: days.length ? (Date.parse(days.at(-1)!) - Date.parse(days[0])) / 86_400_000 : 0 }
+          : undefined,
+      );
       setWarnings(r.warnings);
       setAsked(new Set());
       setView({ kind: "summary" });
@@ -426,7 +434,7 @@ export default function LeakFinder() {
     }
 
     // summary: 읽은 금액이 맞는지만 묻는 첫 화면
-    const missing = findMissing(statements);
+    const missing = findMissing(statements, cardRead);
     const needMore = missing.some((m) => m.required);
     const total = statements.reduce((s, d) => s + (parseWon(d.totalAmount) ?? 0), 0);
     const describe = (d: StatementDraft) => {
@@ -441,11 +449,22 @@ export default function LeakFinder() {
         <TopBar backLabel="처음으로" onBack={() => setStep("upload")} at={1} total={totalSteps} />
         <div>
           <h1 className="title">
-            {statements.length === 0 && hasSubs ? "카드 결제 내역" : `이번 달 ${total > 0 ? won(total) : "통신비"}`},<br />이렇게 읽었어요
+            {statements.length === 0 && (hasSubs || cardRead) ? "카드 결제 내역" : `이번 달 ${total > 0 ? won(total) : "통신비"}`},<br />이렇게 읽었어요
           </h1>
           <p className="sub">고지서와 다르면 눌러서 고쳐 주세요.</p>
         </div>
         <ul className="sum-list">
+          {!hasSubs && cardRead && (
+            <li>
+              <div className="sum-row static">
+                <span className="sum-main">
+                  <span className="sum-label">카드 결제 {cardRead.count}건</span>
+                  <span className="sum-amt plain">구독 없음</span>
+                </span>
+                <span className="sum-desc">이 기간에는 매달 나가는 구독이 보이지 않아요.</span>
+              </div>
+            </li>
+          )}
           {hasSubs && (
             <li>
               <button className="sum-row" onClick={() => setView({ kind: "subs" })}>
@@ -920,9 +939,11 @@ function ResultScreen(props: {
           </>
         ) : (
           <>
-            <span className="small">지금 그대로 두면 1년에</span>
-            <span className="big">{won(result.yearlyTotal)}</span>
-            <span className="small">{result.yearlyTotal > 0 ? "새고 있어요." : "새는 돈은 못 찾았어요."}</span>
+            <span className="small">{result.yearlyTotal > 0 ? "지금 그대로 두면 1년에" : "이번에 올린 내역에서는"}</span>
+            <span className="big">{result.yearlyTotal > 0 ? won(result.yearlyTotal) : "새는 돈 없음"}</span>
+            <span className="small">
+              {result.yearlyTotal > 0 ? "새고 있어요." : "통신 고지서나 2~3개월치 카드 내역을 더 올리면 더 찾아 볼게요."}
+            </span>
           </>
         )}
       </div>

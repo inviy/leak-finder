@@ -34,3 +34,12 @@ describe("빠진 캡처 알려 주기", () => {
     expect(findMissing([m, d, h])).toEqual([{ text: expect.stringContaining("최근 몇 달"), required: false }]);
   });
 });
+
+describe("카드 이용내역 기간", () => {
+  it("한 달치만 있으면 기간을 늘려 달라고 (있으면 좋아요)", () => {
+    expect(findMissing([], { count: 22, spanDays: 30 })).toEqual([{ text: expect.stringContaining("2~3개월"), required: false }]);
+  });
+  it("두 달 넘게 있으면 요청 안 함", () => {
+    expect(findMissing([], { count: 40, spanDays: 70 })).toEqual([]);
+  });
+});
