@@ -70,6 +70,13 @@ function selectiveHint(fee: number, discount?: number): string {
   return `지금 할인 ${won(discount)}은 25%${discount < expected ? "보다 적어요" : "와 달라요"}.`;
 }
 
+/** 서버가 안내 문구 없이 막았을 때 (방화벽 요청 제한 등) */
+function errorMessage(status: number): string {
+  if (status === 403 || status === 429) return "짧은 시간에 너무 많이 읽었어요. 10분 뒤에 다시 하거나 직접 입력해 주세요.";
+  if (status === 413) return "이미지가 너무 커요. 장수를 줄여 주세요.";
+  return "읽지 못했어요. 잠시 후 다시 하거나 직접 입력해 주세요.";
+}
+
 export default function LeakFinder() {
   const [step, setStep] = useState<Step>("upload");
   const [carrier, setCarrier] = useState<Carrier>("KT");
@@ -103,9 +110,10 @@ export default function LeakFinder() {
       const body = new FormData();
       shots.forEach((s) => body.append("images", s.file));
       const res = await fetch("/api/extract", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
-        setRead({ status: "error", message: data?.message ?? "읽지 못했어요. 직접 입력해 주세요." });
+      // 방화벽이 막으면 JSON 이 아닌 글자("Forbidden")가 와서 json() 이 실패함
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setRead({ status: "error", message: data?.message ?? errorMessage(res.status) });
         return;
       }
       const x = data as Extracted;
