@@ -111,7 +111,8 @@ export default function LeakFinder() {
       setStatements(r.drafts);
       const pays = x.payments ?? [];
       setSubs(detectSubscriptions(pays).map((f) => ({ ...f, used: true })));
-      const days = pays.map((p) => p.date).filter((d): d is string => !!d).sort();
+      // 서버가 날짜를 YYYY-MM-DD 로 정리해 주지만, 혹시 다른 모양이 와도 기간 계산이 깨지지 않게
+      const days = pays.map((p) => p.date).filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
       setCardRead(
         pays.length
           ? { count: pays.length, spanDays: days.length ? (Date.parse(days.at(-1)!) - Date.parse(days[0])) / 86_400_000 : 0 }
