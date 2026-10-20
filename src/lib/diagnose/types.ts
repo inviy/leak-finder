@@ -72,8 +72,11 @@ export interface CatalogPlan {
 
 export type ContractState = "ended" | "soon" | "long" | "unknown";
 
-/** R = 통신비, S = 구독 (S1 안 쓰는 구독, S2 같은 종류 여러 개, S3 통신사 혜택과 겹침, S4 한 달에 두 번 결제) */
-export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "S1" | "S2" | "S3" | "S4";
+/**
+ * R = 통신비, S = 구독 (S1 안 쓰는 구독, S2 같은 종류 여러 개, S3 통신사 혜택과 겹침, S4 한 달에 두 번 결제),
+ * H = 숨은 비용 (H1 리볼빙, H2 해외 원화결제, H3 카드 채무면제, H4 휴대폰 할부 이자)
+ */
+export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "S1" | "S2" | "S3" | "S4" | "H1" | "H2" | "H3" | "H4";
 
 /**
  * saving = 줄일 수 있는 돈 (1년 절감액에 합산)

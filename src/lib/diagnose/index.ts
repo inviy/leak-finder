@@ -41,7 +41,11 @@ const sumSavings = (fs: Finding[]) =>
 /** 확인 항목 순서: 이미 끝난 약정처럼 놓치면 손해가 큰 것부터 */
 function checkRank(f: Finding): number {
   if (f.rule === "R7") return f.variant === "ended" ? 0 : f.variant === "soon" ? 1 : f.variant === "long" ? 5 : 3;
+  if (f.rule === "H1") return 0.2;
   if (f.rule === "S3") return 0.5;
+  if (f.rule === "H3") return 0.55;
+  if (f.rule === "H2") return f.variant === "charged" ? 0.7 : 4.5;
+  if (f.rule === "H4") return 1.5;
   if (f.rule === "S4") return 0.6;
   if (f.rule === "R1") return 2;
   if (f.rule === "S2") return 2.5;

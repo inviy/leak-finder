@@ -1,4 +1,5 @@
 import type { ExtractedPayment } from "../extract/schema";
+import { CARD_FEE_ROW } from "../card/hidden";
 import { CATEGORY_LABEL, matchService, SUB_SERVICES, type SubCategory } from "./catalog";
 
 /** 찾은 정기결제 한 건 (확인 화면, 진단 입력) */
@@ -57,7 +58,7 @@ export function detectSubscriptions(payments: ExtractedPayment[]): FoundSub[] {
   for (const p of payments) {
     const s = matchService(p.merchant);
     // "자동이체 넷플릭스"처럼 알려진 구독이면 먼저 잡고, 아닌 것 중 현금, 이체는 버림
-    if (!s && NOT_SUBSCRIPTION.test(p.merchant)) continue;
+    if (!s && (NOT_SUBSCRIPTION.test(p.merchant) || CARD_FEE_ROW.test(p.merchant))) continue;
     const map = s ? byService : rest;
     const k = s ? s.id : p.merchant.replace(/\s+/g, " ").trim();
     map.set(k, [...(map.get(k) ?? []), p]);
