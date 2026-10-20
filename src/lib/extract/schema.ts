@@ -78,6 +78,23 @@ function toWon(v: unknown): number | null {
 
 export class ExtractError extends Error {}
 
+/**
+ * 결제일 정리. 통장 앱은 "10.03"처럼 연도를 빼고 보여 주는 경우가 많아,
+ * "MM-DD" 면 오늘 기준 가장 최근의 그 날짜로 연도를 채움 (미래가 되면 작년)
+ */
+export function normalizeDate(v: string, today: Date): string | null {
+  const t = v.trim().replace(/[./]/g, "-");
+  if (isRealDate(t)) return t;
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (!m) return null;
+  const mm = m[1].padStart(2, "0");
+  const dd = m[2].padStart(2, "0");
+  let y = today.getFullYear();
+  if (`${y}-${mm}-${dd}` > today.toISOString().slice(0, 10)) y -= 1;
+  const full = `${y}-${mm}-${dd}`;
+  return isRealDate(full) ? full : null;
+}
+
 /** "YYYY-MM-DD" 이면서 실제로 있는 날짜인지 (2026-13-40 같은 값은 버림) */
 function isRealDate(v: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -101,7 +118,7 @@ export function pickJson(text: string): unknown {
 }
 
 /** 모양이 틀린 항목은 버리고, 남은 것이 하나도 없으면 실패 */
-export function validateExtracted(raw: unknown): Extracted {
+export function validateExtracted(raw: unknown, today: Date = new Date()): Extracted {
   if (!raw || typeof raw !== "object") throw new ExtractError("객체가 아님");
   const list = (raw as { statements?: unknown }).statements;
   if (!Array.isArray(list)) throw new ExtractError("statements 없음");
@@ -148,7 +165,7 @@ export function validateExtracted(raw: unknown): Extracted {
     const amount = toWon(r.amount);
     if (!merchant || amount === null || amount === 0) continue;
     if (/\d{4}[-\s*]?\d{4}[-\s*]?\d{4}/.test(merchant)) continue;
-    const date = typeof r.date === "string" && isRealDate(r.date) ? r.date : null;
+    const date = typeof r.date === "string" ? normalizeDate(r.date, today) : null;
     payments.push({ merchant, amount: Math.abs(amount), date });
   }
 

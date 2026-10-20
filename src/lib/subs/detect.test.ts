@@ -55,3 +55,49 @@ describe("실제 카드 이용내역 (2026-10, 구독 없는 화면)", () => {
     expect(detectSubscriptions(real)).toEqual([]);
   });
 });
+
+describe("실제 캡처에서 나온 함정 (2026-10-20 카드, 통장)", () => {
+  it("실제 카드: Claude 해외 결제를 구독으로 알아봄, 주유소들은 아님", () => {
+    const card = [
+      { merchant: "ANTHROPIC* CLAUDE SUB(해외)", amount: 149380, date: "2026-10-06" },
+      { merchant: "동일석유(주)마석동일주유소", amount: 50000, date: "2026-10-05" },
+      { merchant: "(주)에이치씨씨에너지 언양(서울)", amount: 50000, date: "2026-10-03" },
+      { merchant: "신창에너지(주)여주(강릉)주유소", amount: 50000, date: "2026-10-02" },
+      { merchant: "천호 현대주유소", amount: 50000, date: "2026-09-20" },
+    ];
+    expect(detectSubscriptions(card).map((f) => f.name)).toEqual(["Claude"]);
+  });
+
+  it("실제 통장: 쿠팡와우월회비는 쿠팡 와우, ATM 출금 15만 원 두 번은 구독 아님", () => {
+    const bank = [
+      { merchant: "ATM출금", amount: 150000, date: "2026-10-07" },
+      { merchant: "쿠팡와우월회비", amount: 7890, date: "2026-10-03" },
+      { merchant: "ATM출금", amount: 150000, date: "2026-09-02" },
+    ];
+    expect(detectSubscriptions(bank).map((f) => f.name)).toEqual(["쿠팡 와우"]);
+  });
+
+  it("같은 주유소에 같은 금액을 한 달 안에 두 번 넣은 건 구독 아님, 한 달 간격이면 매달 같은 금액", () => {
+    const sameWeek = [
+      { merchant: "성수주유소", amount: 50000, date: "2026-10-02" },
+      { merchant: "성수주유소", amount: 50000, date: "2026-10-09" },
+    ];
+    expect(detectSubscriptions(sameWeek)).toEqual([]);
+    const monthly = [
+      { merchant: "필라테스스튜디오", amount: 99000, date: "2026-08-25" },
+      { merchant: "필라테스스튜디오", amount: 99000, date: "2026-09-25" },
+    ];
+    expect(detectSubscriptions(monthly)[0]).toMatchObject({ guessed: true, monthly: 99000 });
+  });
+
+  it("'자동이체'가 붙어도 알려진 구독이면 잡음", () => {
+    expect(detectSubscriptions([{ merchant: "자동이체 넷플릭스", amount: 17000, date: "2026-10-03" }]).map((f) => f.name)).toEqual(["넷플릭스"]);
+  });
+
+  it("날짜가 없으면 매달인지 알 수 없어 추측하지 않음", () => {
+    expect(detectSubscriptions([
+      { merchant: "어딘가", amount: 10000, date: null },
+      { merchant: "어딘가", amount: 10000, date: null },
+    ])).toEqual([]);
+  });
+});

@@ -3,7 +3,7 @@ import { diagnoseAll } from "../diagnose";
 import { toBillInput } from "../draft";
 import { reconcile } from "./reconcile";
 import { _resetRateLimit, allowRequest, MAX_PER_WINDOW, WINDOW_MS } from "./rate-limit";
-import { ExtractError, pickJson, validateExtracted } from "./schema";
+import { ExtractError, normalizeDate, pickJson, validateExtracted } from "./schema";
 
 /** 실제 KT 고지서 캡처(2026년 10월)를 모델이 읽었다면 나왔을 모양. 금액만, 개인정보 없음 */
 const ktModelOutput = {
@@ -135,6 +135,16 @@ describe("카드 결제 내역 읽기 검증", () => {
     expect(v.payments.map((p) => p.merchant)).toEqual(["건대365약국", "NETFLIX.COM", "취소"]);
     expect(v.payments[1].amount).toBe(17000);
     expect(v.payments[2]).toMatchObject({ amount: 3000, date: null });
+  });
+
+  it("통장 앱처럼 연도 없는 날짜(10-03)는 오늘 기준 가장 최근 날짜로", () => {
+    const today = new Date("2026-10-20T09:00:00+09:00");
+    expect(normalizeDate("10-03", today)).toBe("2026-10-03");
+    expect(normalizeDate("10.03", today)).toBe("2026-10-03");
+    expect(normalizeDate("12-15", today)).toBe("2025-12-15");
+    expect(normalizeDate("2026.09.20", today)).toBe("2026-09-20");
+    expect(normalizeDate("02-30", today)).toBeNull();
+    expect(normalizeDate("어제", today)).toBeNull();
   });
 
   it("카드 내역만 있어도 읽기 성공 (통신 고지서 없음)", () => {
