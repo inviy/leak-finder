@@ -92,6 +92,8 @@ button, input, select { font: inherit; color: inherit; }
 .thumbs.row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; }
 .thumbs.row .thumb { flex: 0 0 auto; width: 56px; height: 72px; }
 .note.center { text-align: center; }
+.privacy summary { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.privacy[open] summary { margin-bottom: 4px; }
 .thumb { position: relative; width: 72px; height: 96px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .thumb button {

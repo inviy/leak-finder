@@ -701,10 +701,11 @@ function UploadScreen(props: {
         <div className="warn" role="alert">{read.message}</div>
       )}
 
-      <p className="note">
-        자동으로 읽기를 누르면 캡처를 분석 서버로 보내 금액만 읽고, 읽은 뒤 바로 지워요. 저장하지 않아요.
-        이름, 전화번호는 읽지 않아요.
-      </p>
+      <details className="note privacy">
+        <summary>캡처는 AI가 읽고, 새는돈은 저장하지 않아요.</summary>
+        자동으로 읽기를 누르면 캡처를 미국 Anthropic의 AI로 보내 금액과 항목 이름만 읽어요. Anthropic은 최대 30일
+        보관 후 지우고, AI 학습에 쓰지 않아요. 이름, 번호가 보이는 곳은 잘라서 올려도 돼요.
+      </details>
 
       <div className="spacer" />
       {shots.length > 0 ? (
