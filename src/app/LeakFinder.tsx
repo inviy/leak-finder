@@ -305,6 +305,7 @@ export default function LeakFinder() {
       const picked = subs.filter((x) => !x.used);
       const monthly = picked.reduce((a, x) => a + x.monthly, 0);
       const dups = duplicateGroups(subs.filter((x) => x.used));
+      const doubledNames = subs.filter((x) => x.used && x.doubled).map((x) => x.name);
       const overlaps = telecomOverlaps(
         subs.filter((x) => x.used).map((x) => x.key),
         statements.flatMap((d) => d.addons.map((a) => a.name)),
@@ -321,8 +322,9 @@ export default function LeakFinder() {
             <h1 className="title">안 쓰는 구독을<br />골라 주세요</h1>
             <p className="sub">카드 결제 내역에서 매달 나가는 돈을 찾았어요.</p>
           </div>
-          {(dups.length > 0 || overlaps.length > 0) && (
+          {(dups.length > 0 || overlaps.length > 0 || doubledNames.length > 0) && (
             <p className="hint">
+              {doubledNames.length > 0 && <>한 달에 두 번 결제된 구독이 있어요({doubledNames.join(", ")}). </>}
               {overlaps.length > 0 && <>통신 요금에도 같은 서비스가 있어요. 두 번 내고 있을 수 있어요. </>}
               {dups.map((g) => `${g.label} 구독이 ${g.subs.length}개예요.`).join(" ")}
             </p>
@@ -878,13 +880,14 @@ function StatementForm(props: {
   );
 }
 
-const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}`;
+// 같은 규칙이 여러 번 나올 수 있어서(S2 영상·음악, S3 서비스별) 제목까지 넣음
+const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}:${f.variant ?? ""}:${f.title}`;
 
 /** 결과, 조치 화면에서 쓰는 짧은 할 일 이름 */
 function taskTitle(f: Finding): string {
   if (f.rule === "S1") return `${f.title} 끄기`;
   if (f.rule === "S2") return `${f.title}, 하나만 남기기`;
-  if (f.rule === "S3") return f.title;
+  if (f.rule === "S3" || f.rule === "S4") return f.title;
   if (f.rule === "R2" && f.kind === "saving") return f.title.replace("안 쓰는 부가서비스", "안 쓰는 서비스") + " 끄기";
   return guideFor(f.rule, f.kind, undefined, f.variant).title;
 }

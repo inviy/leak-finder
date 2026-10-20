@@ -42,6 +42,7 @@ const sumSavings = (fs: Finding[]) =>
 function checkRank(f: Finding): number {
   if (f.rule === "R7") return f.variant === "ended" ? 0 : f.variant === "soon" ? 1 : f.variant === "long" ? 5 : 3;
   if (f.rule === "S3") return 0.5;
+  if (f.rule === "S4") return 0.6;
   if (f.rule === "R1") return 2;
   if (f.rule === "S2") return 2.5;
   return 4;

@@ -13,6 +13,8 @@ export interface FoundSub {
   seen: number;
   /** 목록에 없지만 같은 곳에 같은 금액이 2번 이상 → 정기결제로 보임 */
   guessed: boolean;
+  /** 같은 서비스가 20일 안에 두 번 결제됨 (계정 두 개, 가족이 따로 결제 등). 결제일 두 개 */
+  doubled?: [string, string];
 }
 
 /** 정기결제가 아닌 돈 흐름 (현금 인출, 사람에게 보내는 이체 등) */
@@ -27,6 +29,17 @@ function monthlyApart(dates: string[]): boolean {
     if ((gap >= 25 && gap <= 35) || (gap >= 55 && gap <= 65)) return true;
   }
   return false;
+}
+
+/** 한 달에 한 번이어야 할 결제가 20일 안에 두 번 (같은 날 두 번 포함) */
+const DOUBLE_WITHIN_DAYS = 20;
+function doubleCharge(ps: ExtractedPayment[]): [string, string] | undefined {
+  const dated = ps.filter((p): p is ExtractedPayment & { date: string } => !!p.date).sort((a, b) => a.date.localeCompare(b.date));
+  for (let i = 1; i < dated.length; i++) {
+    const gap = (Date.parse(dated[i].date) - Date.parse(dated[i - 1].date)) / DAY;
+    if (gap >= 0 && gap < DOUBLE_WITHIN_DAYS) return [dated[i - 1].date, dated[i].date];
+  }
+  return undefined;
 }
 
 const latest = (ps: ExtractedPayment[]) =>
@@ -53,7 +66,17 @@ export function detectSubscriptions(payments: ExtractedPayment[]): FoundSub[] {
   const found: FoundSub[] = [];
   for (const [id, ps] of byService) {
     const s = SUB_SERVICES.find((x) => x.id === id)!;
-    found.push({ key: id, name: s.name, category: s.category, monthly: latest(ps).amount, seen: ps.length, guessed: false });
+    // 앱 마켓은 여러 앱이 한 이름으로, 렌탈은 정수기와 비데처럼 여러 대가 한 회사로 나와서 제외
+    const doubled = s.category === "appstore" || s.category === "rental" ? undefined : doubleCharge(ps);
+    found.push({
+      key: id,
+      name: s.name,
+      category: s.category,
+      monthly: latest(ps).amount,
+      seen: ps.length,
+      guessed: false,
+      ...(doubled ? { doubled } : {}),
+    });
   }
   for (const [merchant, ps] of rest) {
     const byAmount = new Map<number, string[]>();
@@ -66,12 +89,16 @@ export function detectSubscriptions(payments: ExtractedPayment[]): FoundSub[] {
   return found.sort((a, b) => b.monthly - a.monthly);
 }
 
+/** 같은 종류여도 서로 대신할 수 없는 것 (앱 마켓 결제, 업무 프로그램, 정수기와 비데 같은 렌탈) */
+const NOT_INTERCHANGEABLE = new Set<SubCategory | "other">(["other", "appstore", "software", "rental"]);
+
 /** 같은 종류 구독이 2개 이상인 묶음 (예: 영상 3개) */
 export function duplicateGroups(subs: { category: SubCategory | "other"; name: string; monthly: number }[]) {
   const groups = new Map<SubCategory, typeof subs>();
   for (const s of subs) {
-    if (s.category === "other" || s.category === "appstore") continue;
-    groups.set(s.category, [...(groups.get(s.category) ?? []), s]);
+    const c = s.category;
+    if (c === "other" || NOT_INTERCHANGEABLE.has(c)) continue;
+    groups.set(c, [...(groups.get(c) ?? []), s]);
   }
   return [...groups.entries()]
     .filter(([, list]) => list.length >= 2)
