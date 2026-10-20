@@ -3,6 +3,7 @@ import { extractFromImages, NotConfiguredError, type ImageInput } from "@/lib/ex
 import { ExtractError } from "@/lib/extract/schema";
 import { allowRequest } from "@/lib/extract/rate-limit";
 import { MAX_IMAGES } from "@/lib/extract/limits";
+import { isSameOrigin } from "@/lib/extract/origin";
 
 /** 비용 남용을 막는 한도 (공개 엔드포인트가 유료 모델을 부르므로) */
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -13,6 +14,9 @@ const err = (status: number, code: string, message: string) =>
   NextResponse.json({ error: code, message }, { status });
 
 export async function POST(req: Request) {
+  if (!isSameOrigin(req.headers.get("origin"), [req.headers.get("host"), req.headers.get("x-forwarded-host")]))
+    return err(403, "forbidden", "이 화면에서만 쓸 수 있어요.");
+
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (!allowRequest(ip)) return err(429, "rate_limited", "잠시 후 다시 시도해 주세요.");
 
