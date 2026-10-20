@@ -11,6 +11,7 @@ import { MAX_IMAGES } from "@/lib/extract/limits";
 import { findMissing, type CardRead } from "@/lib/extract/missing";
 import { detectSubscriptions, duplicateGroups, telecomOverlaps, type FoundSub } from "@/lib/subs/detect";
 import { diagnoseSubs } from "@/lib/subs/diagnose";
+import { diagnoseHidden } from "@/lib/card/hidden";
 import { contractReminder, contractReminderPath, googleCalendarUrl, planContractReminder } from "@/lib/reminder";
 import {
   KIND_LABEL,
@@ -86,6 +87,8 @@ export default function LeakFinder() {
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
   /** 카드 결제 내역에서 찾은 정기결제 (used=false 면 사용자가 "안 쓴다"고 고름) */
   const [subs, setSubs] = useState<(FoundSub & { used: boolean })[]>([]);
+  // 카드 명세서, 할부금 고지서의 숨은 비용 (읽은 그대로에서 찾음, 사용자가 고칠 값이 아님)
+  const [hidden, setHidden] = useState<Finding[]>([]);
   const [cardRead, setCardRead] = useState<CardRead | undefined>(undefined);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
   const [view, setView] = useState<ConfirmView>({ kind: "summary" });
@@ -121,6 +124,7 @@ export default function LeakFinder() {
       setStatements(r.drafts);
       const pays = x.payments ?? [];
       setSubs(detectSubscriptions(pays).map((f) => ({ ...f, used: true })));
+      setHidden(diagnoseHidden(x));
       // 서버가 날짜를 YYYY-MM-DD 로 정리해 주지만, 혹시 다른 모양이 와도 기간 계산이 깨지지 않게
       const days = pays.map((p) => p.date).filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
       setCardRead(
@@ -151,8 +155,8 @@ export default function LeakFinder() {
     );
     // 통신 고지서 부가서비스 이름: 카드로 같은 서비스를 또 내는지(S3) 보려고
     const telecomNames = statements.flatMap((d) => d.addons.map((a) => a.name));
-    return mergeFindings(bills.findings, diagnoseSubs(subs, telecomNames));
-  }, [statements, carrier, network, subs]);
+    return mergeFindings(bills.findings, diagnoseSubs(subs, telecomNames), hidden);
+  }, [statements, carrier, network, subs, hidden]);
 
   const updateStatement = (id: string, patch: Partial<StatementDraft>) =>
     setStatements((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -901,7 +905,7 @@ const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}:${f.va
 function taskTitle(f: Finding): string {
   if (f.rule === "S1") return `${f.title} 끄기`;
   if (f.rule === "S2") return `${f.title}, 하나만 남기기`;
-  if (f.rule === "S3" || f.rule === "S4") return f.title;
+  if (f.rule === "S3" || f.rule === "S4" || f.rule.startsWith("H")) return f.title;
   if (f.rule === "R2" && f.kind === "saving") return f.title.replace("안 쓰는 부가서비스", "안 쓰는 서비스") + " 끄기";
   return guideFor(f.rule, f.kind, undefined, f.variant).title;
 }
