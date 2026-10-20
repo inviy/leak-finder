@@ -41,7 +41,9 @@ const sumSavings = (fs: Finding[]) =>
 /** 확인 항목 순서: 이미 끝난 약정처럼 놓치면 손해가 큰 것부터 */
 function checkRank(f: Finding): number {
   if (f.rule === "R7") return f.variant === "ended" ? 0 : f.variant === "soon" ? 1 : f.variant === "long" ? 5 : 3;
+  if (f.rule === "S3") return 0.5;
   if (f.rule === "R1") return 2;
+  if (f.rule === "S2") return 2.5;
   return 4;
 }
 
@@ -212,6 +214,12 @@ function r7Finding(c: ContractState, startYear?: number): Pick<Finding, "title" 
         reason: "보통 3년 약정이에요. 이미 끝났다면 재약정이나 통신사 이동 혜택을 받을 수 있어요",
       };
   }
+}
+
+/** 통신비 진단과 구독 진단 결과를 하나로 합쳐 같은 순서 규칙으로 정렬 */
+export function mergeFindings(...lists: Finding[][]): Diagnosis {
+  const sorted = sortFindings(lists.flat());
+  return { findings: sorted, yearlyTotal: sumSavings(sorted) };
 }
 
 /** 고지서 여러 장 (모바일, 단말대금, 인터넷·TV 등)을 한 번에 진단 */

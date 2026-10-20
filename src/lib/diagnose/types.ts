@@ -72,7 +72,8 @@ export interface CatalogPlan {
 
 export type ContractState = "ended" | "soon" | "long" | "unknown";
 
-export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7";
+/** R = 통신비, S = 구독 (S1 안 쓰는 구독, S2 같은 종류 여러 개, S3 통신사 혜택과 겹침) */
+export type RuleId = "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7" | "S1" | "S2" | "S3";
 
 /**
  * saving = 줄일 수 있는 돈 (1년 절감액에 합산)

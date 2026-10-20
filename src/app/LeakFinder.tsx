@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { diagnoseAll, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Network, type Diagnosis, type Finding } from "@/lib/diagnose";
+import { diagnoseAll, mergeFindings, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Network, type Diagnosis, type Finding } from "@/lib/diagnose";
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
 import { reconcile, type ReconcileWarning } from "@/lib/extract/reconcile";
 import { MAX_IMAGES } from "@/lib/extract/limits";
-import { findMissing } from "@/lib/extract/missing";
+import { findMissing, type CardRead } from "@/lib/extract/missing";
+import { detectSubscriptions, duplicateGroups, telecomOverlaps, type FoundSub } from "@/lib/subs/detect";
+import { diagnoseSubs } from "@/lib/subs/diagnose";
 import { contractReminder, contractReminderPath, googleCalendarUrl, planContractReminder } from "@/lib/reminder";
 import {
   KIND_LABEL,
@@ -30,6 +32,7 @@ type Step = "upload" | "confirm" | "result" | "action";
 type ConfirmView =
   | { kind: "summary" }
   | { kind: "addons" }
+  | { kind: "subs" }
   | { kind: "selective"; id: string }
   | { kind: "contract"; id: string }
   | { kind: "edit"; id: string };
@@ -72,6 +75,9 @@ export default function LeakFinder() {
   const [network, setNetwork] = useState<Network | "unknown" | "">("");
   const [shots, setShots] = useState<Shot[]>([]);
   const [statements, setStatements] = useState<StatementDraft[]>([newStatement("mobile")]);
+  /** 카드 결제 내역에서 찾은 정기결제 (used=false 면 사용자가 "안 쓴다"고 고름) */
+  const [subs, setSubs] = useState<(FoundSub & { used: boolean })[]>([]);
+  const [cardRead, setCardRead] = useState<CardRead | undefined>(undefined);
   const [warnings, setWarnings] = useState<ReconcileWarning[]>([]);
   const [view, setView] = useState<ConfirmView>({ kind: "summary" });
   /** 선택약정을 이미 물어본 명세서 ("잘 모르겠어요"도 답으로 봄) */
@@ -100,8 +106,17 @@ export default function LeakFinder() {
         setRead({ status: "error", message: data?.message ?? "읽지 못했어요. 직접 입력해 주세요." });
         return;
       }
-      const r = reconcile(data as Extracted);
+      const x = data as Extracted;
+      const r = reconcile(x);
       setStatements(r.drafts);
+      const pays = x.payments ?? [];
+      setSubs(detectSubscriptions(pays).map((f) => ({ ...f, used: true })));
+      const days = pays.map((p) => p.date).filter((d): d is string => !!d).sort();
+      setCardRead(
+        pays.length
+          ? { count: pays.length, spanDays: days.length ? (Date.parse(days.at(-1)!) - Date.parse(days[0])) / 86_400_000 : 0 }
+          : undefined,
+      );
       setWarnings(r.warnings);
       setAsked(new Set());
       setView({ kind: "summary" });
@@ -119,11 +134,14 @@ export default function LeakFinder() {
   }, [shots]);
   useEffect(() => () => shotsRef.current.forEach((s) => URL.revokeObjectURL(s.url)), []);
 
-  const result: Diagnosis = useMemo(
-    () =>
-      diagnoseAll(statements.map((s) => toBillInput(s, carrier, network === "unknown" || network === "" ? undefined : network))),
-    [statements, carrier, network],
-  );
+  const result: Diagnosis = useMemo(() => {
+    const bills = diagnoseAll(
+      statements.map((s) => toBillInput(s, carrier, network === "unknown" || network === "" ? undefined : network)),
+    );
+    // 통신 고지서 부가서비스 이름: 카드로 같은 서비스를 또 내는지(S3) 보려고
+    const telecomNames = statements.flatMap((d) => d.addons.map((a) => a.name));
+    return mergeFindings(bills.findings, diagnoseSubs(subs, telecomNames));
+  }, [statements, carrier, network, subs]);
 
   const updateStatement = (id: string, patch: Partial<StatementDraft>) =>
     setStatements((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -154,7 +172,9 @@ export default function LeakFinder() {
         onNext={() => {
           // 직접 입력은 바로 입력 화면으로
           setWarnings([]);
-          setView({ kind: "edit", id: statements[0].id });
+          const first = statements[0] ?? newStatement("mobile");
+          if (!statements[0]) setStatements([first]);
+          setView({ kind: "edit", id: first.id });
           setStep("confirm");
         }}
         onAutoRead={autoRead}
@@ -182,7 +202,12 @@ export default function LeakFinder() {
     const contractIds = statements.filter((d) => d.kind === "home" && (d.contract === "" || asked.has(d.id))).map((d) => d.id);
     const nextContract = (doneIds: Set<string>) =>
       statements.find((d) => d.kind === "home" && d.contract === "" && !doneIds.has(d.id));
-    const totalSteps = 1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length + contractIds.length;
+    const hasSubs = subs.length > 0;
+    // 질문 순서: 읽은 금액 → 안 쓰는 부가서비스 → 안 쓰는 구독 → 25% 할인 → 인터넷 설치 연도
+    const before = 1 + (hasPaidAddons ? 1 : 0) + (hasSubs ? 1 : 0);
+    const totalSteps = before + selectiveIds.length + contractIds.length;
+    const lastPick: ConfirmView = hasSubs ? { kind: "subs" } : hasPaidAddons ? { kind: "addons" } : { kind: "summary" };
+    const fromSummary = () => (hasPaidAddons ? setView({ kind: "addons" }) : hasSubs ? setView({ kind: "subs" }) : afterAddons());
     const afterAddons = (doneIds = asked) => {
       const n = nextSelective(doneIds);
       const c = nextContract(doneIds);
@@ -267,6 +292,64 @@ export default function LeakFinder() {
             <p className={monthly > 0 ? "live on" : "live"} aria-live="polite">
               {monthly > 0 ? <>끄면 1년에 <b>{won(monthly * 12)}</b> 아껴요</> : "고른 서비스가 없어요"}
             </p>
+            <button className="btn" onClick={() => (hasSubs ? setView({ kind: "subs" }) : afterAddons())}>
+              {picked.length > 0 ? "다음" : "다 쓰고 있어요"}
+            </button>
+          </div>
+        </main>
+      );
+    }
+
+    if (view.kind === "subs") {
+      const picked = subs.filter((x) => !x.used);
+      const monthly = picked.reduce((a, x) => a + x.monthly, 0);
+      const dups = duplicateGroups(subs.filter((x) => x.used));
+      const overlaps = telecomOverlaps(
+        subs.filter((x) => x.used).map((x) => x.key),
+        statements.flatMap((d) => d.addons.map((a) => a.name)),
+      );
+      return (
+        <main className="screen">
+          <TopBar
+            backLabel="이전"
+            onBack={() => setView(hasPaidAddons ? { kind: "addons" } : { kind: "summary" })}
+            at={1 + (hasPaidAddons ? 1 : 0) + 1}
+            total={totalSteps}
+          />
+          <div>
+            <h1 className="title">안 쓰는 구독을<br />골라 주세요</h1>
+            <p className="sub">카드 결제 내역에서 매달 나가는 돈을 찾았어요.</p>
+          </div>
+          {(dups.length > 0 || overlaps.length > 0) && (
+            <p className="hint">
+              {overlaps.length > 0 && <>통신 요금에도 같은 서비스가 있어요. 두 번 내고 있을 수 있어요. </>}
+              {dups.map((g) => `${g.label} 구독이 ${g.subs.length}개예요.`).join(" ")}
+            </p>
+          )}
+          <ul className="pick-list">
+            {subs.map((x) => (
+              <li key={x.key}>
+                <button
+                  className="pick"
+                  role="checkbox"
+                  aria-checked={!x.used}
+                  onClick={() => setSubs((all) => all.map((y) => (y.key === x.key ? { ...y, used: !y.used } : y)))}
+                >
+                  <span className="pick-mark" aria-hidden />
+                  <span className="pick-name">
+                    {x.name}
+                    {x.guessed && <span className="pick-tag">매달 같은 금액</span>}
+                  </span>
+                  <span className="pick-amt">월 {won(x.monthly)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="spacer" />
+          <div className="cta-bar">
+            <p className={monthly > 0 ? "live on" : "live"} aria-live="polite">
+              {monthly > 0 ? <>끄면 1년에 <b>{won(monthly * 12)}</b> 아껴요</> : "고른 구독이 없어요"}
+            </p>
             <button className="btn" onClick={() => afterAddons()}>{picked.length > 0 ? "다음" : "다 쓰고 있어요"}</button>
           </div>
         </main>
@@ -284,8 +367,8 @@ export default function LeakFinder() {
         <main className="screen">
           <TopBar
             backLabel="이전"
-            onBack={() => setView(hasPaidAddons ? { kind: "addons" } : { kind: "summary" })}
-            at={1 + (hasPaidAddons ? 1 : 0) + selectiveIds.indexOf(d.id) + 1}
+            onBack={() => setView(lastPick)}
+            at={before + selectiveIds.indexOf(d.id) + 1}
             total={totalSteps}
           />
           <div>
@@ -328,9 +411,9 @@ export default function LeakFinder() {
           <TopBar
             backLabel="이전"
             onBack={() =>
-              setView(prev ? { kind: "selective", id: prev } : hasPaidAddons ? { kind: "addons" } : { kind: "summary" })
+              setView(prev ? { kind: "selective", id: prev } : lastPick)
             }
-            at={1 + (hasPaidAddons ? 1 : 0) + selectiveIds.length + contractIds.indexOf(d.id) + 1}
+            at={before + selectiveIds.length + contractIds.indexOf(d.id) + 1}
             total={totalSteps}
           />
           <div>
@@ -351,7 +434,7 @@ export default function LeakFinder() {
     }
 
     // summary: 읽은 금액이 맞는지만 묻는 첫 화면
-    const missing = findMissing(statements);
+    const missing = findMissing(statements, cardRead);
     const needMore = missing.some((m) => m.required);
     const total = statements.reduce((s, d) => s + (parseWon(d.totalAmount) ?? 0), 0);
     const describe = (d: StatementDraft) => {
@@ -365,10 +448,34 @@ export default function LeakFinder() {
       <main className="screen">
         <TopBar backLabel="처음으로" onBack={() => setStep("upload")} at={1} total={totalSteps} />
         <div>
-          <h1 className="title">이번 달 {total > 0 ? won(total) : "통신비"},<br />이렇게 읽었어요</h1>
+          <h1 className="title">
+            {statements.length === 0 && (hasSubs || cardRead) ? "카드 결제 내역" : `이번 달 ${total > 0 ? won(total) : "통신비"}`},<br />이렇게 읽었어요
+          </h1>
           <p className="sub">고지서와 다르면 눌러서 고쳐 주세요.</p>
         </div>
         <ul className="sum-list">
+          {!hasSubs && cardRead && (
+            <li>
+              <div className="sum-row static">
+                <span className="sum-main">
+                  <span className="sum-label">카드 결제 {cardRead.count}건</span>
+                  <span className="sum-amt plain">구독 없음</span>
+                </span>
+                <span className="sum-desc">이 기간에는 매달 나가는 구독이 보이지 않아요.</span>
+              </div>
+            </li>
+          )}
+          {hasSubs && (
+            <li>
+              <button className="sum-row" onClick={() => setView({ kind: "subs" })}>
+                <span className="sum-main">
+                  <span className="sum-label">카드 정기결제</span>
+                  <span className="sum-amt">월 {won(subs.reduce((a, x) => a + x.monthly, 0))}</span>
+                </span>
+                <span className="sum-desc">구독 {subs.length}개</span>
+              </button>
+            </li>
+          )}
           {statements.map((d) => {
             const w = warnings.find((x) => x.label === d.label);
             return (
@@ -422,12 +529,12 @@ export default function LeakFinder() {
             // 꼭 필요한 화면이 빠졌으면 더 올리기가 주 버튼, 그래도 그냥 진행할 수 있게
             <>
               <button className="btn" onClick={() => setStep("upload")}>캡처 더 올리기</button>
-              <button className="link-btn center" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>
+              <button className="link-btn center" onClick={fromSummary}>
                 이대로 진행할게요
               </button>
             </>
           ) : (
-            <button className="btn" onClick={() => (hasPaidAddons ? setView({ kind: "addons" }) : afterAddons())}>맞아요</button>
+            <button className="btn" onClick={fromSummary}>맞아요</button>
           )}
         </div>
       </main>
@@ -773,6 +880,9 @@ const findingKey = (f: Finding) => `${f.source ?? ""}:${f.rule}:${f.kind}`;
 
 /** 결과, 조치 화면에서 쓰는 짧은 할 일 이름 */
 function taskTitle(f: Finding): string {
+  if (f.rule === "S1") return `${f.title} 끄기`;
+  if (f.rule === "S2") return `${f.title}, 하나만 남기기`;
+  if (f.rule === "S3") return f.title;
   if (f.rule === "R2" && f.kind === "saving") return f.title.replace("안 쓰는 부가서비스", "안 쓰는 서비스") + " 끄기";
   return guideFor(f.rule, f.kind, undefined, f.variant).title;
 }
@@ -829,9 +939,11 @@ function ResultScreen(props: {
           </>
         ) : (
           <>
-            <span className="small">지금 그대로 두면 1년에</span>
-            <span className="big">{won(result.yearlyTotal)}</span>
-            <span className="small">{result.yearlyTotal > 0 ? "새고 있어요." : "새는 돈은 못 찾았어요."}</span>
+            <span className="small">{result.yearlyTotal > 0 ? "지금 그대로 두면 1년에" : "이번에 올린 내역에서는"}</span>
+            <span className="big">{result.yearlyTotal > 0 ? won(result.yearlyTotal) : "새는 돈 없음"}</span>
+            <span className="small">
+              {result.yearlyTotal > 0 ? "새고 있어요." : "통신 고지서나 2~3개월치 카드 내역을 더 올리면 더 찾아 볼게요."}
+            </span>
           </>
         )}
       </div>

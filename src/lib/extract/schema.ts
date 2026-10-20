@@ -25,8 +25,19 @@ export interface ExtractedStatement {
   pastTotals: number[];
 }
 
+/** 카드, 은행 결제 내역 한 줄 (구독 찾기용) */
+export interface ExtractedPayment {
+  /** 가맹점 이름 그대로, 예: "NETFLIX.COM", "쿠팡(와우멤버십)" */
+  merchant: string;
+  /** 결제 금액 (원, 양수) */
+  amount: number;
+  /** 결제일 "YYYY-MM-DD", 안 보이면 null */
+  date: string | null;
+}
+
 export interface Extracted {
   statements: ExtractedStatement[];
+  payments: ExtractedPayment[];
 }
 
 const LIMITS = {
@@ -36,6 +47,7 @@ const LIMITS = {
   /** 한 항목이 이보다 크면 잘못 읽은 것으로 봄 (원) */
   amount: 10_000_000,
   pastTotals: 12,
+  payments: 80,
 };
 
 const KINDS: ExtractedKind[] = ["mobile", "device", "home"];
@@ -65,6 +77,14 @@ function toWon(v: unknown): number | null {
 }
 
 export class ExtractError extends Error {}
+
+/** "YYYY-MM-DD" 이면서 실제로 있는 날짜인지 (2026-13-40 같은 값은 버림) */
+function isRealDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
 
 /** 모델 응답 문자열에서 첫 JSON 객체를 꺼냄 (```json 블록이나 앞뒤 설명이 붙어도) */
 export function pickJson(text: string): unknown {
@@ -113,6 +133,25 @@ export function validateExtracted(raw: unknown): Extracted {
     statements.push({ kind, items, total, pastTotals });
   }
 
-  if (statements.length === 0) throw new ExtractError("읽어 낸 명세서가 없음");
-  return { statements };
+  // 카드, 은행 결제 내역: 가맹점과 금액이 있는 줄만, 카드 번호처럼 보이는 글은 버림
+  const payments: ExtractedPayment[] = [];
+  const plist = (raw as { payments?: unknown }).payments;
+  for (const it of Array.isArray(plist) ? plist.slice(0, LIMITS.payments) : []) {
+    if (!it || typeof it !== "object") continue;
+    const r = it as Record<string, unknown>;
+    // 모델이 실수로 붙인 카드 번호 일부("본인 850*", "1234****")는 지움
+    const merchant = cleanText(
+      typeof r.merchant === "string"
+        ? r.merchant.replace(/(본인|가족)?\s*\d{2,4}\*+(\d|\*)*/g, " ").replace(/(본인|가족)\s*$/g, "")
+        : r.merchant,
+    );
+    const amount = toWon(r.amount);
+    if (!merchant || amount === null || amount === 0) continue;
+    if (/\d{4}[-\s*]?\d{4}[-\s*]?\d{4}/.test(merchant)) continue;
+    const date = typeof r.date === "string" && isRealDate(r.date) ? r.date : null;
+    payments.push({ merchant, amount: Math.abs(amount), date });
+  }
+
+  if (statements.length === 0 && payments.length === 0) throw new ExtractError("읽어 낸 명세서가 없음");
+  return { statements, payments };
 }

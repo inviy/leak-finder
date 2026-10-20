@@ -294,3 +294,8 @@ button, input, select { font: inherit; color: inherit; }
 .need-title { margin: 0; font-size: 16px; font-weight: 700; }
 .need ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 1.5; color: #333; }
 .need .btn { height: 48px; }
+
+.pick-tag { display: inline-block; margin-left: 6px; font-size: 13px; font-weight: 500; color: var(--muted); background: var(--soft); border-radius: 6px; padding: 1px 6px; vertical-align: 1px; }
+.sum-row.static { cursor: default; }
+.sum-amt.plain::after { display: none; }
+.sum-amt.plain { font-weight: 600; color: var(--muted); }

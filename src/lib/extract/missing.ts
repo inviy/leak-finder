@@ -13,8 +13,19 @@ export interface MissingHint {
   required: boolean;
 }
 
-export function findMissing(drafts: StatementDraft[]): MissingHint[] {
+/** 카드 결제 내역을 읽었을 때 정보 (몇 건, 며칠치) */
+export interface CardRead {
+  count: number;
+  /** 가장 이른 날부터 가장 늦은 날까지 일 수, 날짜를 못 읽었으면 0 */
+  spanDays: number;
+}
+
+export function findMissing(drafts: StatementDraft[], card?: CardRead): MissingHint[] {
   const hints: MissingHint[] = [];
+  // 한 달치만 있으면 "매달 같은 금액"을 찾을 수 없음 (카드 앱 기본 조회 기간이 한 달인 경우가 많음)
+  if (card && card.count > 0 && card.spanDays < 45) {
+    hints.push({ text: "카드 이용내역 기간을 2~3개월로 바꿔 캡처하면, 매달 나가는 돈도 찾아 드려요.", required: false });
+  }
   const mobiles = drafts.filter((d) => d.kind === "mobile");
 
   for (const d of mobiles) {
