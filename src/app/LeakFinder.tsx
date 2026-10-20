@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { OPERATOR } from "@/lib/operator";
 import { diagnoseAll, mergeFindings, SELECTIVE_DISCOUNT_RATE, type Carrier, type ContractState, type Network, type Diagnosis, type Finding } from "@/lib/diagnose";
 import { guideFor } from "@/lib/guides";
 import type { Extracted } from "@/lib/extract/schema";
@@ -723,6 +725,10 @@ function UploadScreen(props: {
       ) : (
         <button className="btn secondary" onClick={onNext}>캡처 없이 직접 입력</button>
       )}
+      <p className="foot">
+        운영 {OPERATOR.name} · <a href={`mailto:${OPERATOR.email}`}>문의</a> · <Link href="/privacy">개인정보 처리방침</Link> ·{" "}
+        <Link href="/terms">이용약관</Link>
+      </p>
     </main>
   );
 }
