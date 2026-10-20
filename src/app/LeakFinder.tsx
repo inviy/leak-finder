@@ -926,7 +926,10 @@ function ResultScreen(props: {
   const allDone = tasks.length > 0 && left.length === 0;
 
   const share = async () => {
-    const text = `새는돈: 지금 그대로 두면 1년에 ${won(result.yearlyTotal)} 새고 있대요.`;
+    const text =
+      result.yearlyTotal > 0
+        ? `새는돈: 지금 그대로 두면 1년에 ${won(result.yearlyTotal)} 새고 있대요.`
+        : "새는돈: 통신비랑 카드 내역에서 새는 돈을 찾아 줘요.";
     // 받은 사람이 바로 해 볼 수 있게 주소를 같이 보냄
     const url = window.location.origin;
     try {
@@ -949,24 +952,43 @@ function ResultScreen(props: {
 
       <div className="hero">
         {allDone ? (
-          <>
-            <span className="small">할 일을 다 했어요</span>
-            <span className="big">{won(savedSoFar)}</span>
-            <span className="small">1년 동안 이만큼 덜 새요.</span>
-          </>
+          savedSoFar > 0 ? (
+            <>
+              <span className="small">할 일을 다 했어요</span>
+              <span className="big">{won(savedSoFar)}</span>
+              <span className="small">1년 동안 이만큼 덜 새요.</span>
+            </>
+          ) : (
+            <>
+              <span className="small">할 일을 다 했어요</span>
+              <span className="big">확인 끝</span>
+              <span className="small">새는 곳 {tasks.length}개를 다 살펴봤어요.</span>
+            </>
+          )
         ) : savedSoFar > 0 ? (
           <>
             <span className="small">아직 1년에</span>
             <span className="big">{won(result.yearlyTotal - savedSoFar)}</span>
             <span className="small">새고 있어요. 벌써 {won(savedSoFar)}은 막았어요.</span>
           </>
+        ) : result.yearlyTotal > 0 ? (
+          <>
+            <span className="small">지금 그대로 두면 1년에</span>
+            <span className="big">{won(result.yearlyTotal)}</span>
+            <span className="small">새고 있어요.</span>
+          </>
+        ) : left.length > 0 ? (
+          // 아낄 금액은 계산되지 않았지만 확인할 것이 있음 (리볼빙, 해외 원화결제 등)
+          <>
+            <span className="small">새고 있을 수 있는 곳</span>
+            <span className="big">{left.length}개</span>
+            <span className="small">아래에서 하나씩 확인해 보세요.</span>
+          </>
         ) : (
           <>
-            <span className="small">{result.yearlyTotal > 0 ? "지금 그대로 두면 1년에" : "이번에 올린 내역에서는"}</span>
-            <span className="big">{result.yearlyTotal > 0 ? won(result.yearlyTotal) : "새는 돈 없음"}</span>
-            <span className="small">
-              {result.yearlyTotal > 0 ? "새고 있어요." : "통신 고지서나 2~3개월치 카드 내역을 더 올리면 더 찾아 볼게요."}
-            </span>
+            <span className="small">이번에 올린 내역에서는</span>
+            <span className="big">새는 돈 없음</span>
+            <span className="small">통신 고지서나 2~3개월치 카드 내역을 더 올리면 더 찾아 볼게요.</span>
           </>
         )}
       </div>
