@@ -101,3 +101,83 @@ describe("실제 캡처에서 나온 함정 (2026-10-20 카드, 통장)", () => 
     ])).toEqual([]);
   });
 });
+
+describe("구독 목록 넓히기 (2026-10)", () => {
+  it("새로 넣은 서비스들을 가맹점 이름으로 알아봄", () => {
+    const cases: [string, string][] = [
+      ["ADOBE *CREATIVE CLOUD", "adobe"],
+      ["MSFT *MICROSOFT 365", "m365"],
+      ["NOTION LABS", "notion"],
+      ["PERPLEXITY.AI", "perplexity"],
+      ["코웨이(주)", "coway"],
+      ["LG전자 케어솔루션", "lgcare"],
+      ["SK매직", "skmagic"],
+      ["XBOX GAME PASS", "gamepass"],
+      ["T우주 우주패스", "tuniverse"],
+      ["윌라 오디오북", "welaaa"],
+      ["라프텔", "laftel"],
+    ];
+    for (const [merchant, id] of cases) {
+      expect(detectSubscriptions([{ merchant, amount: 10000, date: "2026-10-01" }])[0]?.key, merchant).toBe(id);
+    }
+  });
+
+  it("업무 프로그램, 렌탈은 같은 종류여도 중복 묶음 아님 (정수기와 비데는 서로 대신 못 함)", () => {
+    const g = duplicateGroups([
+      { category: "software", name: "Adobe", monthly: 30000 },
+      { category: "software", name: "Notion", monthly: 12000 },
+      { category: "rental", name: "코웨이 렌탈", monthly: 30000 },
+      { category: "rental", name: "SK매직 렌탈", monthly: 25000 },
+    ]);
+    expect(g).toEqual([]);
+  });
+
+  it("게임 구독 2개는 중복 묶음", () => {
+    const g = duplicateGroups([
+      { category: "game", name: "Xbox Game Pass", monthly: 15000 },
+      { category: "game", name: "PlayStation Plus", monthly: 12000 },
+    ]);
+    expect(g.map((x) => x.label)).toEqual(["게임"]);
+  });
+
+  it("통신 고지서에 우주패스가 있는데 카드로도 내면 겹침", () => {
+    const found = detectSubscriptions([{ merchant: "우주패스 all", amount: 9900, date: "2026-10-01" }]);
+    expect(telecomOverlaps(found.map((f) => f.key), ["우주패스 all"])).toEqual(["tuniverse"]);
+  });
+});
+
+describe("한 달에 두 번 결제", () => {
+  it("같은 서비스가 20일 안에 두 번이면 두 날짜를 남김", () => {
+    const f = detectSubscriptions([
+      { merchant: "NETFLIX.COM", amount: 17000, date: "2026-10-03" },
+      { merchant: "넷플릭스", amount: 13500, date: "2026-10-15" },
+    ]);
+    expect(f[0]).toMatchObject({ key: "netflix", doubled: ["2026-10-03", "2026-10-15"] });
+  });
+
+  it("한 달 간격은 정상 (두 번 결제 아님)", () => {
+    const f = detectSubscriptions([
+      { merchant: "NETFLIX.COM", amount: 17000, date: "2026-09-03" },
+      { merchant: "NETFLIX.COM", amount: 17000, date: "2026-10-03" },
+    ]);
+    expect(f[0].doubled).toBeUndefined();
+  });
+
+  it("앱 마켓, 렌탈은 한 이름으로 여러 건이 나와서 제외", () => {
+    const f = detectSubscriptions([
+      { merchant: "APPLE.COM/BILL", amount: 4400, date: "2026-10-03" },
+      { merchant: "APPLE.COM/BILL", amount: 14000, date: "2026-10-05" },
+      { merchant: "코웨이", amount: 30000, date: "2026-10-10" },
+      { merchant: "코웨이", amount: 20000, date: "2026-10-10" },
+    ]);
+    expect(f.every((x) => x.doubled === undefined)).toBe(true);
+  });
+
+  it("날짜가 없으면 판단하지 않음", () => {
+    const f = detectSubscriptions([
+      { merchant: "NETFLIX.COM", amount: 17000, date: null },
+      { merchant: "NETFLIX.COM", amount: 17000, date: null },
+    ]);
+    expect(f[0].doubled).toBeUndefined();
+  });
+});

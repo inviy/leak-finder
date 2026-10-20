@@ -38,3 +38,23 @@ describe("구독 진단", () => {
     expect(merged[0].reason).toContain("166,800원");
   });
 });
+
+describe("한 달에 두 번 결제 (S4)", () => {
+  it("남겨 둔 구독이 두 번 결제됐으면 확인 항목, 날짜와 1년 금액을 알려 줌", () => {
+    const f = diagnoseSubs([
+      { key: "netflix", name: "넷플릭스", category: "video", monthly: 13500, used: true, doubled: ["2026-10-03", "2026-10-15"] },
+    ]);
+    const s4 = f.find((x) => x.rule === "S4")!;
+    expect(s4.kind).toBe("check");
+    expect(s4.title).toBe("넷플릭스 한 달에 두 번 결제");
+    expect(s4.reason).toContain("넷플릭스(10/3, 10/15)");
+    expect(s4.reason).toContain(`${(13500 * 12).toLocaleString("ko-KR")}원`);
+  });
+
+  it("안 쓴다고 고른 구독은 S1 으로 가고 S4 는 안 나옴", () => {
+    const f = diagnoseSubs([
+      { key: "netflix", name: "넷플릭스", category: "video", monthly: 13500, used: false, doubled: ["2026-10-03", "2026-10-15"] },
+    ]);
+    expect(f.map((x) => x.rule)).toEqual(["S1"]);
+  });
+});
